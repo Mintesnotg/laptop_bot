@@ -1,11 +1,42 @@
+import fs from "node:fs";
+import https from "node:https";
+import path from "node:path";
 import { Markup, Telegraf, session } from "telegraf";
 import { env } from "../env";
-import { findBudgetRange } from "../shared/constants";
+import { findBudgetRange, normalizeUsageKey } from "../shared/constants";
 import { budgetKeyboard, ramKeyboard, resultsKeyboard, storageKeyboard, usageKeyboard } from "./keyboards";
 import { fetchRecommendations } from "./recommendationClient";
 import { BotContext, defaultSession } from "./types";
 
-const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN);
+function buildTelegramAgent() {
+  const options: ConstructorParameters<typeof https.Agent>[0] = {
+    keepAlive: true,
+    keepAliveMsecs: 10000
+  };
+
+  if (env.TELEGRAM_CA_CERT_PATH) {
+    const certPath = path.resolve(env.TELEGRAM_CA_CERT_PATH);
+    if (!fs.existsSync(certPath)) {
+      throw new Error(`TELEGRAM_CA_CERT_PATH not found: ${certPath}`);
+    }
+    options.ca = fs.readFileSync(certPath);
+    console.log(`Loaded Telegram CA certificate: ${certPath}`);
+  }
+
+  if (env.TELEGRAM_TLS_INSECURE) {
+    options.rejectUnauthorized = false;
+    console.warn("TELEGRAM_TLS_INSECURE=true enabled. Use only as a temporary local workaround.");
+  }
+
+  return new https.Agent(options);
+}
+
+const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN, {
+  telegram: {
+    apiRoot: env.TELEGRAM_API_ROOT,
+    agent: buildTelegramAgent()
+  }
+});
 
 bot.use(session());
 
@@ -161,7 +192,13 @@ bot.action(/^budget:(.+)$/i, async (ctx) => {
 
 bot.action(/^usage:(.+)$/i, async (ctx) => {
   const typedCtx = ctx as unknown as BotContext;
-  typedCtx.session.usage = ctx.match[1];
+  const normalizedUsage = normalizeUsageKey(ctx.match[1]);
+  if (!normalizedUsage) {
+    await ctx.answerCbQuery("Invalid usage value");
+    return;
+  }
+
+  typedCtx.session.usage = normalizedUsage;
   delete typedCtx.session.ramGb;
   delete typedCtx.session.storageGb;
   await ctx.answerCbQuery();

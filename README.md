@@ -29,6 +29,7 @@ Core data modeled in Prisma:
 - **Budget/usage/spec input** is captured as `RecommendationRequest`.
 - **Top 3-5 results** are stored with rank/score in `RecommendationResult`.
 - **Analytics** can be built from request + result logs.
+- Usage input accepts both `UX_UI` and `UX/UI` (normalized to `UX_UI` internally).
 
 ### Table breakdown
 
@@ -131,6 +132,25 @@ npm run dev
 6. Open admin UI:
 
 - `http://localhost:3000/admin`
+7. Open Swagger docs:
+
+- `http://localhost:3000/docs`
+- raw OpenAPI JSON: `http://localhost:3000/openapi.json`
+
+## Enterprise Network TLS (Telegram)
+
+If startup fails with `SELF_SIGNED_CERT_IN_CHAIN` on `api.telegram.org`, your company likely uses HTTPS inspection.
+
+Preferred fix:
+
+1. Export your enterprise root CA certificate as a PEM file.
+2. Set `TELEGRAM_CA_CERT_PATH` in `.env` to that PEM path.
+3. Restart the app.
+
+Temporary fallback for local development only:
+
+- Set `TELEGRAM_TLS_INSECURE=true` in `.env`.
+- Do not use this in production.
 
 ## Prisma TLS Note (for this machine)
 

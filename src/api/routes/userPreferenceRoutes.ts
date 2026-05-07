@@ -2,6 +2,7 @@ import { UsageTag } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../prisma";
+import { usageTagSchema } from "../../shared/contracts";
 
 const preferenceSchema = z.object({
   telegramUserId: z.coerce.bigint(),
@@ -11,17 +12,7 @@ const preferenceSchema = z.object({
   languageCode: z.string().optional(),
   budgetMin: z.number().int().positive(),
   budgetMax: z.number().int().positive(),
-  usageTag: z.enum([
-    "STUDENT",
-    "OFFICE",
-    "DESIGN",
-    "GAMING",
-    "CODING",
-    "GRAPHICS_DESIGN",
-    "ARCHITECTURE",
-    "READING",
-    "DAILY_BROWSING"
-  ]),
+  usageTag: usageTagSchema,
   ramGb: z.number().int().positive(),
   storageGb: z.number().int().positive()
 });

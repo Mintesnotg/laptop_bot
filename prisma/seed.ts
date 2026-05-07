@@ -1,6 +1,6 @@
-import { PrismaClient, StorageType, UsageTag } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import "dotenv/config";
+import { StorageType, UsageTag } from "@prisma/client";
+import { prisma } from "../src/prisma";
 
 type SeedProduct = {
   brand: string;
