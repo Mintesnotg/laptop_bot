@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Laptop Bot Admin</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --line: #d7deea;
+      --text: #1f2a44;
+      --accent: #0b6cff;
+      --danger: #b42318;
+    }
+
+    * {
+      box-sizing: border-box;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      background: linear-gradient(135deg, #edf4ff, var(--bg));
+      color: var(--text);
+      padding: 24px;
+    }
+
+    h1, h2 {
+      margin: 0 0 12px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 8px 24px rgba(12, 42, 88, 0.08);
+    }
+
+    label {
+      display: block;
+      margin: 8px 0 4px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    input, textarea, select, button {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    textarea {
+      min-height: 72px;
+      resize: vertical;
+    }
+
+    button {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      border: 0;
+      cursor: pointer;
+      margin-top: 12px;
+    }
+
+    .inline {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+
+    .chip input {
+      width: auto;
+      margin: 0;
+      padding: 0;
+    }
+
+    .status {
+      margin-top: 8px;
+      font-size: 13px;
+    }
+
+    .error {
+      color: var(--danger);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      padding: 8px 6px;
+      vertical-align: top;
+    }
+
+    .muted {
+      color: #64748b;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Laptop Recommendation Bot Admin</h1>
+  <p class="muted">Use this page to add products and review popular user queries.</p>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Admin Access</h2>
+      <label for="apiKey">Admin API Key</label>
+      <input id="apiKey" type="password" placeholder="Enter ADMIN_API_KEY" />
+      <button id="saveKeyBtn">Save Key</button>
+      <p class="status" id="keyStatus"></p>
+    </section>
+
+    <section class="card">
+      <h2>Add Product</h2>
+      <form id="productForm">
+        <div class="inline">
+          <div>
+            <label for="brand">Brand</label>
+            <input id="brand" required />
+          </div>
+          <div>
+            <label for="model">Model</label>
+            <input id="model" required />
+          </div>
+        </div>
+
+        <div class="inline">
+          <div>
+            <label for="price">Price (ETB)</label>
+            <input id="price" type="number" min="1" required />
+          </div>
+          <div>
+            <label for="ramGb">RAM (GB)</label>
+            <input id="ramGb" type="number" min="1" required />
+          </div>
+        </div>
+
+        <div class="inline">
+          <div>
+            <label for="storageGb">Storage (GB)</label>
+            <input id="storageGb" type="number" min="1" required />
+          </div>
+          <div>
+            <label for="storageType">Storage Type</label>
+            <select id="storageType">
+              <option value="SSD">SSD</option>
+              <option value="NVME">NVME</option>
+              <option value="HDD">HDD</option>
+            </select>
+          </div>
+        </div>
+
+        <label for="cpu">CPU</label>
+        <input id="cpu" required />
+
+        <label for="gpu">GPU</label>
+        <input id="gpu" />
+
+        <label>Usage Tags</label>
+        <div class="chips" id="usageTags"></div>
+
+        <label for="description">Description</label>
+        <textarea id="description"></textarea>
+
+        <label for="imageUrls">Image URLs (comma-separated)</label>
+        <textarea id="imageUrls" placeholder="https://... , https://..."></textarea>
+
+        <button type="submit">Create Product</button>
+        <p class="status" id="productStatus"></p>
+      </form>
+    </section>
+  </div>
+
+  <div class="grid" style="margin-top: 16px;">
+    <section class="card">
+      <h2>Products</h2>
+      <button id="reloadProductsBtn">Reload Products</button>
+      <div style="overflow:auto; margin-top: 10px;">
+        <table id="productsTable">
+          <thead>
+            <tr>
+              <th>Brand</th>
+              <th>Model</th>
+              <th>Price</th>
+              <th>RAM</th>
+              <th>Storage</th>
+              <th>Usage</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Analytics</h2>
+      <button id="reloadAnalyticsBtn">Reload Analytics</button>
+      <h3>Popular Usage</h3>
+      <ul id="popularUsage"></ul>
+      <h3>Top Budget Queries</h3>
+      <ul id="topBudgets"></ul>
+      <h3>Top Recommended Products</h3>
+      <ul id="topProducts"></ul>
+    </section>
+  </div>
+
+  <script>
+    const usageValues = [
+      "STUDENT",
+      "OFFICE",
+      "DESIGN",
+      "GAMING",
+      "CODING",
+      "GRAPHICS_DESIGN",
+      "ARCHITECTURE",
+      "READING",
+      "DAILY_BROWSING"
+    ];
+
+    const usageContainer = document.getElementById("usageTags");
+    usageValues.forEach((tag) => {
+      const label = document.createElement("label");
+      label.className = "chip";
+      label.innerHTML = `<input type="checkbox" value="${tag}" /> ${tag}`;
+      usageContainer.appendChild(label);
+    });
+
+    const apiKeyInput = document.getElementById("apiKey");
+    const keyStatus = document.getElementById("keyStatus");
+    const productStatus = document.getElementById("productStatus");
+    const savedKey = localStorage.getItem("adminApiKey") || "";
+    apiKeyInput.value = savedKey;
+
+    function getApiKey() {
+      return apiKeyInput.value.trim();
+    }
+
+    function setStatus(el, message, isError = false) {
+      el.textContent = message;
+      el.className = isError ? "status error" : "status";
+    }
+
+    document.getElementById("saveKeyBtn").addEventListener("click", () => {
+      localStorage.setItem("adminApiKey", getApiKey());
+      setStatus(keyStatus, "API key saved.");
+    });
+
+    async function callAdmin(path, options = {}) {
+      const response = await fetch(`/api/admin${path}`, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-api-key": getApiKey(),
+          ...(options.headers || {})
+        }
+      });
+
+      if (!response.ok) {
+        let errMessage = `Request failed (${response.status})`;
+        try {
+          const payload = await response.json();
+          errMessage = payload.message || JSON.stringify(payload.errors || payload);
+        } catch (_error) {
+          // no-op
+        }
+        throw new Error(errMessage);
+      }
+
+      return response.json();
+    }
+
+    async function loadProducts() {
+      try {
+        const products = await callAdmin("/products");
+        const body = document.querySelector("#productsTable tbody");
+        body.innerHTML = "";
+
+        for (const product of products) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${product.brand}</td>
+            <td>${product.model}</td>
+            <td>${product.price.toLocaleString()} ETB</td>
+            <td>${product.ramGb} GB</td>
+            <td>${product.storageGb} GB ${product.storageType}</td>
+            <td>${product.usageTags.join(", ")}</td>
+          `;
+          body.appendChild(tr);
+        }
+      } catch (error) {
+        setStatus(productStatus, error.message, true);
+      }
+    }
+
+    async function loadAnalytics() {
+      try {
+        const data = await callAdmin("/analytics");
+
+        const popularUsage = document.getElementById("popularUsage");
+        const topBudgets = document.getElementById("topBudgets");
+        const topProducts = document.getElementById("topProducts");
+
+        popularUsage.innerHTML = data.popularUsage
+          .map((entry) => `<li>${entry.usageTag}: ${entry._count._all}</li>`)
+          .join("");
+
+        topBudgets.innerHTML = data.topBudgets
+          .map((entry) => `<li>${entry.budgetMin.toLocaleString()}-${entry.budgetMax.toLocaleString()} ETB: ${entry._count._all}</li>`)
+          .join("");
+
+        topProducts.innerHTML = data.topProducts
+          .map((entry) => `<li>${entry.brand} ${entry.model}: ${entry.count}</li>`)
+          .join("");
+      } catch (error) {
+        setStatus(productStatus, error.message, true);
+      }
+    }
+
+    document.getElementById("reloadProductsBtn").addEventListener("click", loadProducts);
+    document.getElementById("reloadAnalyticsBtn").addEventListener("click", loadAnalytics);
+
+    document.getElementById("productForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const selectedUsageTags = Array.from(document.querySelectorAll("#usageTags input:checked")).map((el) => el.value);
+
+      const payload = {
+        brand: document.getElementById("brand").value.trim(),
+        model: document.getElementById("model").value.trim(),
+        price: Number(document.getElementById("price").value),
+        ramGb: Number(document.getElementById("ramGb").value),
+        storageGb: Number(document.getElementById("storageGb").value),
+        storageType: document.getElementById("storageType").value,
+        cpu: document.getElementById("cpu").value.trim(),
+        gpu: document.getElementById("gpu").value.trim() || undefined,
+        usageTags: selectedUsageTags,
+        description: document.getElementById("description").value.trim() || undefined,
+        imageUrls: document
+          .getElementById("imageUrls")
+          .value
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean)
+      };
+
+      try {
+        await callAdmin("/products", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+
+        setStatus(productStatus, "Product created successfully.");
+        document.getElementById("productForm").reset();
+        loadProducts();
+      } catch (error) {
+        setStatus(productStatus, error.message, true);
+      }
+    });
+
+    loadProducts();
+    loadAnalytics();
+  </script>
+</body>
+</html>
