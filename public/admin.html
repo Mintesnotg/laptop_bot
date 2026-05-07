@@ -12,6 +12,8 @@
       --text: #1f2a44;
       --accent: #0b6cff;
       --danger: #b42318;
+      --success: #067647;
+      --muted: #64748b;
     }
 
     * {
@@ -26,7 +28,7 @@
       padding: 24px;
     }
 
-    h1, h2 {
+    h1, h2, h3 {
       margin: 0 0 12px;
     }
 
@@ -73,6 +75,23 @@
       margin-top: 12px;
     }
 
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+
+    .secondary {
+      background: #334155;
+    }
+
+    .danger {
+      background: var(--danger);
+    }
+
+    .success {
+      background: var(--success);
+    }
+
     .inline {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -111,6 +130,15 @@
       color: var(--danger);
     }
 
+    .success-text {
+      color: var(--success);
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -124,26 +152,108 @@
       vertical-align: top;
     }
 
-    .muted {
-      color: #64748b;
+    .pill {
+      border-radius: 999px;
+      padding: 2px 10px;
       font-size: 12px;
+      display: inline-block;
+      color: #fff;
+    }
+
+    .pill.active {
+      background: var(--success);
+    }
+
+    .pill.inactive {
+      background: var(--danger);
+    }
+
+    .thumb {
+      width: 48px;
+      height: 36px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+    }
+
+    .table-btn {
+      width: auto;
+      margin: 0;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .pagination {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .pagination button,
+    .pagination select,
+    .pagination input {
+      width: auto;
+      margin: 0;
+    }
+
+    .uploaded-list {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .uploaded-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #f8fafc;
+    }
+
+    .uploaded-item button {
+      width: auto;
+      margin: 0;
+      padding: 4px 8px;
+      font-size: 12px;
+      background: #475569;
     }
   </style>
 </head>
 <body>
   <h1>Laptop Bot Admin</h1>
-  <p class="muted">Use this page to add products and review popular user queries.</p>
+  <p class="muted">Manage products, upload pictures, and monitor recommendation analytics.</p>
 
   <div class="grid">
     <section class="card">
-      <h2>Admin Access</h2>
-      <label for="apiKey">Admin API Key</label>
-      <input id="apiKey" type="password" placeholder="Enter ADMIN_API_KEY" />
-      <button id="saveKeyBtn">Save Key</button>
-      <p class="status" id="keyStatus"></p>
+      <h2>Admin Login</h2>
+      <div id="loginFormWrap">
+        <label for="username">Username</label>
+        <input id="username" autocomplete="username" />
+
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" />
+
+        <button id="loginBtn">Login</button>
+      </div>
+
+      <div id="loggedInWrap" class="hidden">
+        <p id="whoami" class="muted"></p>
+        <button id="logoutBtn" class="secondary">Logout</button>
+      </div>
+
+      <p class="status" id="authStatus"></p>
     </section>
 
-    <section class="card">
+    <section class="card" id="productCreateSection">
       <h2>Add Product</h2>
       <form id="productForm">
         <div class="inline">
@@ -195,37 +305,64 @@
         <label for="description">Description</label>
         <textarea id="description"></textarea>
 
-        <label for="imageUrls">Image URLs (comma-separated)</label>
-        <textarea id="imageUrls" placeholder="https://... , https://..."></textarea>
+        <label for="imageFiles">Upload Product Images</label>
+        <input id="imageFiles" type="file" accept="image/*" multiple />
+        <button type="button" id="uploadImagesBtn" class="secondary">Upload Selected Images</button>
 
-        <button type="submit">Create Product</button>
+        <div id="uploadedImages" class="uploaded-list"></div>
+
+        <button type="submit" id="createProductBtn">Create Product</button>
         <p class="status" id="productStatus"></p>
       </form>
     </section>
   </div>
 
   <div class="grid" style="margin-top: 16px;">
-    <section class="card">
+    <section class="card" id="productsSection">
       <h2>Products</h2>
-      <button id="reloadProductsBtn">Reload Products</button>
+      <div class="inline">
+        <div>
+          <label for="searchInput">Search by Brand / Model</label>
+          <input id="searchInput" placeholder="HP, Dell, ThinkPad..." />
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="searchBtn" class="secondary">Search</button>
+        </div>
+      </div>
+
       <div style="overflow:auto; margin-top: 10px;">
         <table id="productsTable">
           <thead>
             <tr>
+              <!-- <th>Image</th> -->
               <th>Brand</th>
               <th>Model</th>
               <th>Price</th>
               <th>RAM</th>
               <th>Storage</th>
-              <th>Usage</th>
+              <th>Status</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
+
+      <div class="pagination">
+        <button id="prevPageBtn" class="secondary">Prev</button>
+        <button id="nextPageBtn" class="secondary">Next</button>
+        <span id="pageInfo" class="muted"></span>
+        <label for="pageSizeSelect" style="margin:0;">Page size</label>
+        <select id="pageSizeSelect">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="20">20</option>
+        </select>
+      </div>
     </section>
 
-    <section class="card">
+    <section class="card" id="analyticsSection">
       <h2>Analytics</h2>
       <button id="reloadAnalyticsBtn">Reload Analytics</button>
       <h3>Popular Usage</h3>
@@ -259,6 +396,15 @@
       "DAILY_BROWSING"
     ];
 
+    const state = {
+      token: localStorage.getItem("adminToken") || "",
+      user: null,
+      page: 1,
+      pageSize: Number(localStorage.getItem("adminPageSize") || "10"),
+      totalPages: 1,
+      uploadedImageUrls: []
+    };
+
     const usageContainer = document.getElementById("usageTags");
     usageValues.forEach((tag) => {
       const label = document.createElement("label");
@@ -267,34 +413,60 @@
       usageContainer.appendChild(label);
     });
 
-    const apiKeyInput = document.getElementById("apiKey");
-    const keyStatus = document.getElementById("keyStatus");
+    const authStatus = document.getElementById("authStatus");
     const productStatus = document.getElementById("productStatus");
-    const savedKey = localStorage.getItem("adminApiKey") || "";
-    apiKeyInput.value = savedKey;
+    const createProductBtn = document.getElementById("createProductBtn");
+    const loginFormWrap = document.getElementById("loginFormWrap");
+    const loggedInWrap = document.getElementById("loggedInWrap");
+    const whoami = document.getElementById("whoami");
+    const pageSizeSelect = document.getElementById("pageSizeSelect");
+    pageSizeSelect.value = String(state.pageSize);
 
-    function getApiKey() {
-      return apiKeyInput.value.trim();
-    }
-
-    function setStatus(el, message, isError = false) {
+    function setStatus(el, message, type = "normal") {
       el.textContent = message;
-      el.className = isError ? "status error" : "status";
+      el.className = type === "error" ? "status error" : type === "success" ? "status success-text" : "status";
     }
 
-    document.getElementById("saveKeyBtn").addEventListener("click", () => {
-      localStorage.setItem("adminApiKey", getApiKey());
-      setStatus(keyStatus, "API key saved.");
-    });
+    function setAuthenticatedUI() {
+      const isLoggedIn = Boolean(state.token);
+      loginFormWrap.classList.toggle("hidden", isLoggedIn);
+      loggedInWrap.classList.toggle("hidden", !isLoggedIn);
+      document.getElementById("productCreateSection").classList.toggle("hidden", !isLoggedIn);
+      document.getElementById("productsSection").classList.toggle("hidden", !isLoggedIn);
+      document.getElementById("analyticsSection").classList.toggle("hidden", !isLoggedIn);
+      whoami.textContent = isLoggedIn && state.user ? `Logged in as ${state.user.username}` : "";
+    }
+
+    async function login(username, password) {
+      const response = await fetch("/api/admin/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.message || "Login failed");
+      }
+
+      return response.json();
+    }
 
     async function callAdmin(path, options = {}) {
+      if (!state.token) {
+        throw new Error("Please login first");
+      }
+
+      const isFormData = options.body instanceof FormData;
+      const headers = {
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
+        ...(options.headers || {}),
+        Authorization: `Bearer ${state.token}`
+      };
+
       const response = await fetch(`/api/admin${path}`, {
         ...options,
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-api-key": getApiKey(),
-          ...(options.headers || {})
-        }
+        headers
       });
 
       if (!response.ok) {
@@ -305,65 +477,325 @@
         } catch (_error) {
           // no-op
         }
+
+        if (response.status === 401) {
+          localStorage.removeItem("adminToken");
+          state.token = "";
+          state.user = null;
+          setAuthenticatedUI();
+        }
+
         throw new Error(errMessage);
       }
 
       return response.json();
     }
 
-    async function loadProducts() {
-      try {
-        const products = await callAdmin("/products");
-        const body = document.querySelector("#productsTable tbody");
-        body.innerHTML = "";
+    function normalizeManualImageUrls(rawText) {
+      return rawText
+        .split(/[,\n]/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+    }
 
-        for (const product of products) {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td>${product.brand}</td>
-            <td>${product.model}</td>
-            <td>${product.price.toLocaleString()} ETB</td>
-            <td>${product.ramGb} GB</td>
-            <td>${product.storageGb} GB ${product.storageType}</td>
-            <td>${product.usageTags.join(", ")}</td>
-          `;
-          body.appendChild(tr);
-        }
-      } catch (error) {
-        setStatus(productStatus, error.message, true);
+    function renderUploadedImages() {
+      const container = document.getElementById("uploadedImages");
+      container.innerHTML = "";
+
+      state.uploadedImageUrls.forEach((url, index) => {
+        const item = document.createElement("div");
+        item.className = "uploaded-item";
+
+        const img = document.createElement("img");
+        img.className = "thumb";
+        img.src = url;
+        img.alt = "uploaded image";
+
+        const text = document.createElement("span");
+        text.className = "muted";
+        text.textContent = url;
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.textContent = "Remove";
+        removeBtn.addEventListener("click", () => {
+          state.uploadedImageUrls.splice(index, 1);
+          renderUploadedImages();
+        });
+
+        item.appendChild(img);
+        item.appendChild(text);
+        item.appendChild(removeBtn);
+        container.appendChild(item);
+      });
+    }
+
+    async function uploadSelectedImages() {
+      const fileInput = document.getElementById("imageFiles");
+      const files = Array.from(fileInput.files || []);
+
+      if (files.length === 0) {
+        setStatus(productStatus, "Choose one or more image files first.", "error");
+        return;
       }
+
+      const formData = new FormData();
+      files.forEach((file) => formData.append("images", file));
+
+      const result = await callAdmin("/uploads", {
+        method: "POST",
+        body: formData
+      });
+
+      const uploadedUrls = (result.files || []).map((file) => file.url);
+      state.uploadedImageUrls = Array.from(new Set([...state.uploadedImageUrls, ...uploadedUrls]));
+      fileInput.value = "";
+      renderUploadedImages();
+      setStatus(productStatus, `${uploadedUrls.length} image(s) uploaded successfully.`, "success");
+    }
+
+    async function loadProducts() {
+      const searchText = document.getElementById("searchInput").value.trim();
+      const params = new URLSearchParams({
+        page: String(state.page),
+        pageSize: String(state.pageSize)
+      });
+
+      if (searchText) {
+        params.set("search", searchText);
+      }
+
+      const data = await callAdmin(`/products?${params.toString()}`);
+      const products = data.items || [];
+      state.totalPages = data.pagination?.totalPages || 1;
+      state.page = data.pagination?.page || state.page;
+
+      const body = document.querySelector("#productsTable tbody");
+      body.innerHTML = "";
+
+      for (const product of products) {
+        const tr = document.createElement("tr");
+
+        // const imageCell = document.createElement("td");
+        // const firstImage = product.images?.[0]?.imageUrl;
+        // if (firstImage) {
+        //   const img = document.createElement("img");
+        //   img.src = firstImage;
+        //   img.className = "thumb";
+        //   img.alt = `${product.brand} ${product.model}`;
+        //   imageCell.appendChild(img);
+        // } else {
+        //   imageCell.textContent = "-";
+        // }
+
+        const brandCell = document.createElement("td");
+        brandCell.textContent = product.brand;
+
+        const modelCell = document.createElement("td");
+        modelCell.textContent = product.model;
+
+        const priceCell = document.createElement("td");
+        priceCell.textContent = `${Number(product.price).toLocaleString()} ETB`;
+
+        const ramCell = document.createElement("td");
+        ramCell.textContent = `${product.ramGb} GB`;
+
+        const storageCell = document.createElement("td");
+        storageCell.textContent = `${product.storageGb} GB ${product.storageType}`;
+
+        const statusCell = document.createElement("td");
+        const statusPill = document.createElement("span");
+        statusPill.className = `pill ${product.isActive ? "active" : "inactive"}`;
+        statusPill.textContent = product.isActive ? "Active" : "Inactive";
+        statusCell.appendChild(statusPill);
+
+        const actionCell = document.createElement("td");
+        const toggleBtn = document.createElement("button");
+        toggleBtn.type = "button";
+        toggleBtn.className = `table-btn ${product.isActive ? "danger" : "success"}`;
+        toggleBtn.textContent = product.isActive ? "Deactivate" : "Activate";
+        toggleBtn.addEventListener("click", async () => {
+          const nextStatus = !product.isActive;
+          const action = nextStatus ? "activate" : "deactivate";
+          const ok = confirm(`Are you sure you want to ${action} ${product.brand} ${product.model}?`);
+          if (!ok) {
+            return;
+          }
+
+          await callAdmin(`/products/${product.id}/status`, {
+            method: "PATCH",
+            body: JSON.stringify({ isActive: nextStatus })
+          });
+
+          setStatus(productStatus, `Product status updated for ${product.brand} ${product.model}.`, "success");
+          await loadProducts();
+        });
+
+        actionCell.appendChild(toggleBtn);
+
+      //  tr.appendChild(imageCell);
+        tr.appendChild(brandCell);
+        tr.appendChild(modelCell);
+        tr.appendChild(priceCell);
+        tr.appendChild(ramCell);
+        tr.appendChild(storageCell);
+        tr.appendChild(statusCell);
+        tr.appendChild(actionCell);
+        body.appendChild(tr);
+      }
+
+      document.getElementById("pageInfo").textContent = `Page ${state.page} of ${state.totalPages}`;
+      document.getElementById("prevPageBtn").disabled = state.page <= 1;
+      document.getElementById("nextPageBtn").disabled = state.page >= state.totalPages;
     }
 
     async function loadAnalytics() {
+      const data = await callAdmin("/analytics");
+
+      const popularUsage = document.getElementById("popularUsage");
+      const topBudgets = document.getElementById("topBudgets");
+      const topProducts = document.getElementById("topProducts");
+
+      popularUsage.innerHTML = data.popularUsage
+        .map((entry) => `<li>${entry.usageTag}: ${entry._count._all}</li>`)
+        .join("");
+
+      topBudgets.innerHTML = data.topBudgets
+        .map((entry) => `<li>${entry.budgetMin.toLocaleString()}-${entry.budgetMax.toLocaleString()} ETB: ${entry._count._all}</li>`)
+        .join("");
+
+      topProducts.innerHTML = data.topProducts
+        .map((entry) => `<li>${entry.brand} ${entry.model}: ${entry.count}</li>`)
+        .join("");
+    }
+
+    async function bootstrap() {
+      setAuthenticatedUI();
+
+      if (!state.token) {
+        return;
+      }
+
       try {
-        const data = await callAdmin("/analytics");
+        const me = await callAdmin("/auth/me");
+        state.user = me.user;
+        setAuthenticatedUI();
 
-        const popularUsage = document.getElementById("popularUsage");
-        const topBudgets = document.getElementById("topBudgets");
-        const topProducts = document.getElementById("topProducts");
-
-        popularUsage.innerHTML = data.popularUsage
-          .map((entry) => `<li>${entry.usageTag}: ${entry._count._all}</li>`)
-          .join("");
-
-        topBudgets.innerHTML = data.topBudgets
-          .map((entry) => `<li>${entry.budgetMin.toLocaleString()}-${entry.budgetMax.toLocaleString()} ETB: ${entry._count._all}</li>`)
-          .join("");
-
-        topProducts.innerHTML = data.topProducts
-          .map((entry) => `<li>${entry.brand} ${entry.model}: ${entry.count}</li>`)
-          .join("");
+        await loadProducts();
+        await loadAnalytics();
       } catch (error) {
-        setStatus(productStatus, error.message, true);
+        localStorage.removeItem("adminToken");
+        state.token = "";
+        state.user = null;
+        setAuthenticatedUI();
+        setStatus(authStatus, error.message, "error");
       }
     }
 
-    document.getElementById("reloadProductsBtn").addEventListener("click", loadProducts);
-    document.getElementById("reloadAnalyticsBtn").addEventListener("click", loadAnalytics);
+    document.getElementById("loginBtn").addEventListener("click", async () => {
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+
+      try {
+        const result = await login(username, password);
+        state.token = result.token;
+        state.user = result.user;
+        localStorage.setItem("adminToken", state.token);
+        setAuthenticatedUI();
+        setStatus(authStatus, `Welcome ${state.user.username}.`, "success");
+
+        await loadProducts();
+        await loadAnalytics();
+      } catch (error) {
+        setStatus(authStatus, error.message, "error");
+      }
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      state.token = "";
+      state.user = null;
+      localStorage.removeItem("adminToken");
+      setAuthenticatedUI();
+      setStatus(authStatus, "Logged out.", "success");
+      document.querySelector("#productsTable tbody").innerHTML = "";
+      document.getElementById("popularUsage").innerHTML = "";
+      document.getElementById("topBudgets").innerHTML = "";
+      document.getElementById("topProducts").innerHTML = "";
+    });
+
+    document.getElementById("uploadImagesBtn").addEventListener("click", async () => {
+      try {
+        await uploadSelectedImages();
+      } catch (error) {
+        setStatus(productStatus, error.message, "error");
+      }
+    });
+
+    document.getElementById("searchBtn").addEventListener("click", async () => {
+      try {
+        state.page = 1;
+        await loadProducts();
+      } catch (error) {
+        setStatus(productStatus, error.message, "error");
+      }
+    });
+
+    document.getElementById("prevPageBtn").addEventListener("click", async () => {
+      if (state.page <= 1) {
+        return;
+      }
+
+      try {
+        state.page -= 1;
+        await loadProducts();
+      } catch (error) {
+        setStatus(productStatus, error.message, "error");
+      }
+    });
+
+    document.getElementById("nextPageBtn").addEventListener("click", async () => {
+      if (state.page >= state.totalPages) {
+        return;
+      }
+
+      try {
+        state.page += 1;
+        await loadProducts();
+      } catch (error) {
+        setStatus(productStatus, error.message, "error");
+      }
+    });
+
+    pageSizeSelect.addEventListener("change", async () => {
+      state.pageSize = Number(pageSizeSelect.value);
+      localStorage.setItem("adminPageSize", String(state.pageSize));
+      state.page = 1;
+
+      try {
+        await loadProducts();
+      } catch (error) {
+        setStatus(productStatus, error.message, "error");
+      }
+    });
+
+    document.getElementById("reloadAnalyticsBtn").addEventListener("click", async () => {
+      try {
+        await loadAnalytics();
+      } catch (error) {
+        setStatus(productStatus, error.message, "error");
+      }
+    });
 
     document.getElementById("productForm").addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (createProductBtn.disabled) {
+        return;
+      }
+
       const selectedUsageTags = Array.from(document.querySelectorAll("#usageTags input:checked")).map((el) => el.value);
+      const manualImageUrlsInput = document.getElementById("imageUrls");
+      const manualUrls = manualImageUrlsInput ? normalizeManualImageUrls(manualImageUrlsInput.value || "") : [];
+      const imageUrls = Array.from(new Set([...state.uploadedImageUrls, ...manualUrls]));
 
       const payload = {
         brand: document.getElementById("brand").value.trim(),
@@ -376,13 +808,13 @@
         gpu: document.getElementById("gpu").value.trim() || undefined,
         usageTags: selectedUsageTags,
         description: document.getElementById("description").value.trim() || undefined,
-        imageUrls: document
-          .getElementById("imageUrls")
-          .value
-          .split(",")
-          .map((x) => x.trim())
-          .filter(Boolean)
+        imageUrls
       };
+
+      const defaultCreateText = "Create Product";
+      const originalBtnText = createProductBtn.textContent || defaultCreateText;
+      createProductBtn.disabled = true;
+      createProductBtn.textContent = "Creating...";
 
       try {
         await callAdmin("/products", {
@@ -390,16 +822,21 @@
           body: JSON.stringify(payload)
         });
 
-        setStatus(productStatus, "Product created successfully.");
+        setStatus(productStatus, "Product created successfully.", "success");
         document.getElementById("productForm").reset();
-        loadProducts();
+        state.uploadedImageUrls = [];
+        renderUploadedImages();
+        state.page = 1;
+        await loadProducts();
       } catch (error) {
-        setStatus(productStatus, error.message, true);
+        setStatus(productStatus, error.message, "error");
+      } finally {
+        createProductBtn.disabled = false;
+        createProductBtn.textContent = originalBtnText || defaultCreateText;
       }
     });
 
-    loadProducts();
-    loadAnalytics();
+    bootstrap();
   </script>
 </body>
 </html>

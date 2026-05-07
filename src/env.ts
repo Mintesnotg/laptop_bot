@@ -18,7 +18,11 @@ const envSchema = z.object({
   BOT_WEBHOOK_PATH: z.string().default("/telegram/webhook"),
   PUBLIC_WEBHOOK_URL: z.string().optional(),
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
-  ADMIN_API_KEY: z.string().default("change-me")
+  ADMIN_API_KEY: z.string().default("change-me"),
+  ADMIN_JWT_SECRET: z.string().min(16).default("change-this-very-long-admin-jwt-secret"),
+  ADMIN_JWT_EXPIRES_IN: z.string().default("12h"),
+  ADMIN_UPLOAD_DIR: z.string().default("uploads"),
+  ADMIN_UPLOAD_MAX_FILE_MB: z.coerce.number().min(1).max(20).default(5)
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

@@ -14,6 +14,19 @@ export const usageTagSchema = z.string().transform((value, ctx) => {
   return normalized as UsageKey;
 });
 
+const imageLocationSchema = z.string().refine((value) => {
+  if (value.startsWith("/uploads/")) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}, "Image URL must be https://... or /uploads/...");
+
 export const recommendationRequestSchema = z.object({
   telegramUserId: z.coerce.bigint().optional(),
   budgetKey: z.enum(BUDGET_KEYS),
@@ -36,7 +49,7 @@ export const productCreateSchema = z.object({
   gpu: z.string().optional(),
   usageTags: z.array(usageTagSchema).min(1),
   description: z.string().optional(),
-  imageUrls: z.array(z.string().url()).default([])
+  imageUrls: z.array(imageLocationSchema).default([])
 });
 
 export type ProductCreateInput = z.infer<typeof productCreateSchema>;

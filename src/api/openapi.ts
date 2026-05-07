@@ -1,12 +1,10 @@
-import { BUDGET_KEYS, USAGE_KEYS } from "../shared/constants";
-
-const usageInputValues = [...USAGE_KEYS, "UX/UI"];
+import { BUDGET_KEYS, CLIENT_USAGE_VALUES, USAGE_KEYS } from "../shared/constants";
 
 export const openApiDocument = {
   openapi: "3.0.3",
   info: {
     title: "Telegram Laptop Recommendation Bot API",
-    version: "1.0.0",
+    version: "1.1.0",
     description: "API documentation for recommendation, user preference, and admin endpoints."
   },
   servers: [{ url: "http://localhost:3000" }],
@@ -14,10 +12,16 @@ export const openApiDocument = {
     { name: "Health" },
     { name: "Recommendations" },
     { name: "Users" },
+    { name: "Admin Auth" },
     { name: "Admin" }
   ],
   components: {
     securitySchemes: {
+      BearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT"
+      },
       AdminApiKey: {
         type: "apiKey",
         in: "header",
@@ -35,7 +39,7 @@ export const openApiDocument = {
       },
       UsageInput: {
         type: "string",
-        enum: usageInputValues
+        enum: CLIENT_USAGE_VALUES
       },
       RecommendationRequest: {
         type: "object",
@@ -47,23 +51,6 @@ export const openApiDocument = {
           ramGb: { type: "integer", minimum: 4, example: 16 },
           storageGb: { type: "integer", minimum: 128, example: 512 },
           limit: { type: "integer", minimum: 1, maximum: 10, default: 5 }
-        }
-      },
-      RecommendationItem: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          brand: { type: "string" },
-          model: { type: "string" },
-          price: { type: "integer" },
-          ramGb: { type: "integer" },
-          storageGb: { type: "integer" },
-          storageType: { type: "string", enum: ["SSD", "NVME", "HDD"] },
-          cpu: { type: "string" },
-          gpu: { type: "string", nullable: true },
-          description: { type: "string", nullable: true },
-          score: { type: "number" },
-          imageUrl: { type: "string", nullable: true }
         }
       },
       RecommendationResponse: {
@@ -80,7 +67,23 @@ export const openApiDocument = {
           },
           items: {
             type: "array",
-            items: { $ref: "#/components/schemas/RecommendationItem" }
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                brand: { type: "string" },
+                model: { type: "string" },
+                price: { type: "integer" },
+                ramGb: { type: "integer" },
+                storageGb: { type: "integer" },
+                storageType: { type: "string", enum: ["SSD", "NVME", "HDD"] },
+                cpu: { type: "string" },
+                gpu: { type: "string", nullable: true },
+                description: { type: "string", nullable: true },
+                score: { type: "number" },
+                imageUrl: { type: "string", nullable: true }
+              }
+            }
           }
         }
       },
@@ -98,6 +101,29 @@ export const openApiDocument = {
           usageTag: { $ref: "#/components/schemas/UsageInput" },
           ramGb: { type: "integer", minimum: 1 },
           storageGb: { type: "integer", minimum: 1 }
+        }
+      },
+      LoginRequest: {
+        type: "object",
+        required: ["username", "password"],
+        properties: {
+          username: { type: "string" },
+          password: { type: "string" }
+        }
+      },
+      LoginResponse: {
+        type: "object",
+        properties: {
+          token: { type: "string" },
+          user: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              username: { type: "string" },
+              displayName: { type: "string", nullable: true },
+              isActive: { type: "boolean" }
+            }
+          }
         }
       },
       ProductInput: {
@@ -124,107 +150,44 @@ export const openApiDocument = {
           }
         }
       },
-      ProductUpdateInput: {
+      ProductStatusInput: {
+        type: "object",
+        required: ["isActive"],
+        properties: {
+          isActive: { type: "boolean" }
+        }
+      },
+      ProductListResponse: {
         type: "object",
         properties: {
-          brand: { type: "string" },
-          model: { type: "string" },
-          price: { type: "integer", minimum: 1 },
-          ramGb: { type: "integer", minimum: 1 },
-          storageGb: { type: "integer", minimum: 1 },
-          storageType: { type: "string", enum: ["SSD", "NVME", "HDD"] },
-          cpu: { type: "string" },
-          gpu: { type: "string" },
-          usageTags: {
+          items: {
             type: "array",
-            minItems: 1,
-            items: { $ref: "#/components/schemas/UsageInput" }
+            items: { type: "object" }
           },
-          description: { type: "string" },
-          imageUrls: {
-            type: "array",
-            items: { type: "string", format: "uri" }
+          pagination: {
+            type: "object",
+            properties: {
+              page: { type: "integer" },
+              pageSize: { type: "integer" },
+              total: { type: "integer" },
+              totalPages: { type: "integer" }
+            }
           }
         }
       },
-      ProductImage: {
+      UploadResponse: {
         type: "object",
         properties: {
-          id: { type: "string" },
-          productId: { type: "string" },
-          imageUrl: { type: "string" },
-          sortOrder: { type: "integer" }
-        }
-      },
-      Product: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          brand: { type: "string" },
-          model: { type: "string" },
-          price: { type: "integer" },
-          ramGb: { type: "integer" },
-          storageGb: { type: "integer" },
-          storageType: { type: "string" },
-          cpu: { type: "string" },
-          gpu: { type: "string", nullable: true },
-          usageTags: {
-            type: "array",
-            items: { $ref: "#/components/schemas/UsageTag" }
-          },
-          description: { type: "string", nullable: true },
-          isActive: { type: "boolean" },
-          images: {
-            type: "array",
-            items: { $ref: "#/components/schemas/ProductImage" }
-          },
-          createdAt: { type: "string", format: "date-time" },
-          updatedAt: { type: "string", format: "date-time" }
-        }
-      },
-      AnalyticsResponse: {
-        type: "object",
-        properties: {
-          popularUsage: {
+          files: {
             type: "array",
             items: {
               type: "object",
               properties: {
-                usageTag: { $ref: "#/components/schemas/UsageTag" },
-                _count: {
-                  type: "object",
-                  properties: {
-                    _all: { type: "integer" }
-                  }
-                }
-              }
-            }
-          },
-          topBudgets: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                budgetMin: { type: "integer" },
-                budgetMax: { type: "integer" },
-                _count: {
-                  type: "object",
-                  properties: {
-                    _all: { type: "integer" }
-                  }
-                }
-              }
-            }
-          },
-          topProducts: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                productId: { type: "string" },
-                count: { type: "integer" },
-                brand: { type: "string" },
-                model: { type: "string" }
+                filename: { type: "string" },
+                originalName: { type: "string" },
+                mimetype: { type: "string" },
+                size: { type: "integer" },
+                url: { type: "string" }
               }
             }
           }
@@ -289,20 +252,10 @@ export const openApiDocument = {
             }
           },
           "400": {
-            description: "Validation error",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ValidationErrorResponse" }
-              }
-            }
+            description: "Validation error"
           },
           "500": {
-            description: "Internal server error",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/GenericErrorResponse" }
-              }
-            }
+            description: "Internal server error"
           }
         }
       }
@@ -320,42 +273,63 @@ export const openApiDocument = {
           }
         },
         responses: {
-          "201": {
-            description: "Preference created"
-          },
-          "400": {
-            description: "Validation error",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ValidationErrorResponse" }
-              }
+          "201": { description: "Preference created" },
+          "400": { description: "Validation error" }
+        }
+      }
+    },
+    "/api/admin/auth/login": {
+      post: {
+        tags: ["Admin Auth"],
+        summary: "Login to admin dashboard",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/LoginRequest" }
             }
           }
+        },
+        responses: {
+          "200": {
+            description: "Authenticated",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/LoginResponse" }
+              }
+            }
+          },
+          "401": { description: "Invalid credentials" }
+        }
+      }
+    },
+    "/api/admin/auth/me": {
+      get: {
+        tags: ["Admin Auth"],
+        summary: "Get current admin profile",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        responses: {
+          "200": { description: "Authenticated admin" },
+          "401": { description: "Unauthorized" }
         }
       }
     },
     "/api/admin/products": {
       get: {
         tags: ["Admin"],
-        summary: "List all products",
-        security: [{ AdminApiKey: [] }],
+        summary: "List products with pagination",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+          { name: "pageSize", in: "query", schema: { type: "integer", default: 10, maximum: 50 } },
+          { name: "search", in: "query", schema: { type: "string" } }
+        ],
         responses: {
           "200": {
             description: "Products list",
             content: {
               "application/json": {
-                schema: {
-                  type: "array",
-                  items: { $ref: "#/components/schemas/Product" }
-                }
-              }
-            }
-          },
-          "401": {
-            description: "Unauthorized",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/GenericErrorResponse" }
+                schema: { $ref: "#/components/schemas/ProductListResponse" }
               }
             }
           }
@@ -363,57 +337,8 @@ export const openApiDocument = {
       },
       post: {
         tags: ["Admin"],
-        summary: "Create a product",
-        security: [{ AdminApiKey: [] }],
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/ProductUpdateInput" }
-            }
-          }
-        },
-        responses: {
-          "201": {
-            description: "Product created",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/Product" }
-              }
-            }
-          },
-          "400": {
-            description: "Validation error",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ValidationErrorResponse" }
-              }
-            }
-          },
-          "401": {
-            description: "Unauthorized",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/GenericErrorResponse" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/admin/products/{id}": {
-      put: {
-        tags: ["Admin"],
-        summary: "Update a product",
-        security: [{ AdminApiKey: [] }],
-        parameters: [
-          {
-            name: "id",
-            in: "path",
-            required: true,
-            schema: { type: "string" }
-          }
-        ],
+        summary: "Create product",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
         requestBody: {
           required: true,
           content: {
@@ -423,27 +348,78 @@ export const openApiDocument = {
           }
         },
         responses: {
-          "200": {
-            description: "Product updated",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/Product" }
+          "201": { description: "Product created" },
+          "400": { description: "Validation error" }
+        }
+      }
+    },
+    "/api/admin/products/{id}": {
+      put: {
+        tags: ["Admin"],
+        summary: "Update product",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ProductInput" }
+            }
+          }
+        },
+        responses: {
+          "200": { description: "Product updated" },
+          "400": { description: "Validation error" }
+        }
+      }
+    },
+    "/api/admin/products/{id}/status": {
+      patch: {
+        tags: ["Admin"],
+        summary: "Activate or deactivate a product",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ProductStatusInput" }
+            }
+          }
+        },
+        responses: {
+          "200": { description: "Product status updated" },
+          "400": { description: "Validation error" }
+        }
+      }
+    },
+    "/api/admin/uploads": {
+      post: {
+        tags: ["Admin"],
+        summary: "Upload one or more product images",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                properties: {
+                  images: {
+                    type: "array",
+                    items: { type: "string", format: "binary" }
+                  }
+                }
               }
             }
-          },
-          "400": {
-            description: "Validation error",
+          }
+        },
+        responses: {
+          "201": {
+            description: "Uploaded files",
             content: {
               "application/json": {
-                schema: { $ref: "#/components/schemas/ValidationErrorResponse" }
-              }
-            }
-          },
-          "401": {
-            description: "Unauthorized",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/GenericErrorResponse" }
+                schema: { $ref: "#/components/schemas/UploadResponse" }
               }
             }
           }
@@ -453,25 +429,10 @@ export const openApiDocument = {
     "/api/admin/analytics": {
       get: {
         tags: ["Admin"],
-        summary: "Get usage and recommendation analytics",
-        security: [{ AdminApiKey: [] }],
+        summary: "Get recommendation analytics",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
         responses: {
-          "200": {
-            description: "Analytics result",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/AnalyticsResponse" }
-              }
-            }
-          },
-          "401": {
-            description: "Unauthorized",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/GenericErrorResponse" }
-              }
-            }
-          }
+          "200": { description: "Analytics result" }
         }
       }
     }

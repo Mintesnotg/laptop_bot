@@ -1,4 +1,5 @@
 import "dotenv/config";
+import bcrypt from "bcryptjs";
 import { StorageType, UsageTag } from "@prisma/client";
 import { prisma } from "../src/prisma";
 
@@ -150,6 +151,26 @@ const products: SeedProduct[] = [
 ];
 
 async function main() {
+  const adminUsername = (process.env.ADMIN_BOOTSTRAP_USERNAME ?? "admin").trim().toLowerCase();
+  const adminPassword = process.env.ADMIN_BOOTSTRAP_PASSWORD ?? "admin12345";
+  const adminDisplayName = process.env.ADMIN_BOOTSTRAP_DISPLAY_NAME ?? "Administrator";
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
+
+  await prisma.adminUser.upsert({
+    where: { username: adminUsername },
+    update: {
+      passwordHash,
+      displayName: adminDisplayName,
+      isActive: true
+    },
+    create: {
+      username: adminUsername,
+      passwordHash,
+      displayName: adminDisplayName,
+      isActive: true
+    }
+  });
+
   for (const product of products) {
     const created = await prisma.product.upsert({
       where: {

@@ -66,10 +66,15 @@ Implemented in `src/bot/index.ts` and `src/bot/keyboards.ts`.
 
 - `POST /api/recommendations`
 - `POST /api/user-preferences`
-- Admin APIs:
-  - `GET /api/admin/products`
+- Admin Auth APIs:
+  - `POST /api/admin/auth/login`
+  - `GET /api/admin/auth/me`
+- Admin Product APIs:
+  - `GET /api/admin/products?page=1&pageSize=10&search=`
   - `POST /api/admin/products`
   - `PUT /api/admin/products/:id`
+  - `PATCH /api/admin/products/:id/status`
+  - `POST /api/admin/uploads` (multipart image upload)
   - `GET /api/admin/analytics`
 
 Implemented in `src/api/routes`.
@@ -84,8 +89,11 @@ Implemented in `src/services/recommendationService.ts`.
 
 ### 4. Admin Dashboard
 
-- Simple admin page to add products and load analytics.
-- Uses API key header (`x-admin-api-key`).
+- Login with username/password from PostgreSQL (`AdminUser`).
+- Add products with file upload + direct image URLs.
+- Activate/deactivate products with confirmation.
+- Paginated laptop list with search.
+- Analytics for popular usage/budget/product.
 
 Implemented in `public/admin.html` and `/api/admin/*` routes.
 
@@ -113,7 +121,8 @@ docker compose up -d
 3. Configure `.env`:
 
 - set `TELEGRAM_BOT_TOKEN`
-- set secure `ADMIN_API_KEY`
+- set secure `ADMIN_JWT_SECRET`
+- set admin bootstrap credentials (`ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD`)
 
 4. Run Prisma setup:
 
@@ -122,6 +131,8 @@ npm run db:generate
 npm run db:migrate
 npm run db:seed
 ```
+
+`db:seed` creates or updates the bootstrap admin user.
 
 5. Start app:
 
@@ -166,8 +177,23 @@ Then close terminal and reopen for normal secure behavior.
 
 ## Future Phase 2 Suggestions
 
-- Admin authentication (JWT + login) instead of API key.
+- Role-based admin permissions and password reset flow.
 - Product inventory/availability + seller contact records.
 - Saved user sessions in Redis/PostgreSQL for multi-device continuity.
 - Better ranking strategy with weighted preference profiles.
 - Webhook deployment to cloud (Render/Fly/Railway/AWS).
+
+## Bot Integration Steps (Way Forward)
+
+1. Run DB changes and seed:
+   `npm run db:migrate` then `npm run db:seed`
+2. Login to admin dashboard (`/admin`) using bootstrap credentials from `.env`.
+3. Upload product images and create active laptop products from admin UI.
+4. Ensure bot service can reach backend recommendation API:
+   `BOT_API_BASE_URL=http://<your-api-host>:3000`
+5. Start bot and API:
+   `npm run dev`
+6. In Telegram:
+   use `/start` and complete budget + usage + RAM + storage flow.
+7. Verify:
+   products returned are active only and include model/spec/price/image.
