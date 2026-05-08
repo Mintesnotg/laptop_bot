@@ -18,10 +18,13 @@ function toApiUsageValue(usage: RecommendationUsage): UsageKey {
 }
 
 export async function fetchRecommendations(payload: RecommendationPayload) {
+  const requestId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
   const response = await fetch(`${env.BOT_API_BASE_URL}/api/recommendations`, {
     method: "POST",
     headers: {
-      "content-type": "application/json"
+      "content-type": "application/json",
+      "x-request-id": `bot-rec:${requestId}`
     },
     body: JSON.stringify({
       ...payload,

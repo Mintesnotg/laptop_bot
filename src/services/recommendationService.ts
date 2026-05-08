@@ -42,7 +42,7 @@ function scoreProduct(
   const storageScore = Math.min(15, storageDelta / 128 + (storageGb >= filters.storageGb ? 8 : 0));
 
   const workloadBoost =
-    filters.usage === "GAMING" || filters.usage === "DESIGN" || filters.usage === "GRAPHICS_DESIGN"
+    filters.usage === "GAMING" || filters.usage === "GRAPHICS_DESIGN"
       ? ramGb >= 16
         ? 5
         : 0
@@ -167,7 +167,8 @@ export async function recommendLaptops(filters: RecommendationRequestInput) {
       gpu: product.gpu,
       description: product.description,
       score: product.score,
-      imageUrl: product.images[0]?.imageUrl ?? null
+      imageUrl: product.images[0]?.imageUrl ?? null,
+      imageUrls: product.images.map((image) => image.imageUrl)
     }))
   };
 }

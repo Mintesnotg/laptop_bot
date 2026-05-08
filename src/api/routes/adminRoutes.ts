@@ -29,6 +29,35 @@ const productStatusSchema = z.object({
   isActive: z.boolean()
 });
 
+const budgetOptionCreateSchema = z.object({
+  key: z.string().trim().min(1),
+  label: z.string().trim().min(1),
+  min: z.number().int().min(0),
+  max: z.number().int().min(0),
+  sortOrder: z.number().int().default(0),
+  isActive: z.boolean().default(true)
+});
+
+const budgetOptionUpdateSchema = budgetOptionCreateSchema.partial();
+
+const ramOptionCreateSchema = z.object({
+  gb: z.number().int().min(1),
+  label: z.string().trim().min(1),
+  sortOrder: z.number().int().default(0),
+  isActive: z.boolean().default(true)
+});
+
+const ramOptionUpdateSchema = ramOptionCreateSchema.partial();
+
+const storageOptionCreateSchema = z.object({
+  gb: z.number().int().min(1),
+  label: z.string().trim().min(1),
+  sortOrder: z.number().int().default(0),
+  isActive: z.boolean().default(true)
+});
+
+const storageOptionUpdateSchema = storageOptionCreateSchema.partial();
+
 const uploadDirAbsolutePath = path.resolve(process.cwd(), env.ADMIN_UPLOAD_DIR);
 
 const upload = multer({
@@ -329,4 +358,109 @@ adminRouter.get("/analytics", async (_req, res) => {
         model: productMap.get(entry.productId)?.model ?? "Unknown"
       }))
   });
+});
+
+adminRouter.get("/options/budgets", async (_req, res) => {
+  const items = await prisma.budgetOption.findMany({
+    orderBy: [{ sortOrder: "asc" }, { min: "asc" }]
+  });
+  return res.json({ items });
+});
+
+adminRouter.post("/options/budgets", async (req, res) => {
+  const parsed = budgetOptionCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
+  }
+
+  const created = await prisma.budgetOption.create({ data: parsed.data });
+  return res.status(201).json(created);
+});
+
+adminRouter.put("/options/budgets/:id", async (req, res) => {
+  const parsed = budgetOptionUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
+  }
+
+  const updated = await prisma.budgetOption.update({
+    where: { id: req.params.id },
+    data: parsed.data
+  });
+  return res.json(updated);
+});
+
+adminRouter.delete("/options/budgets/:id", async (req, res) => {
+  await prisma.budgetOption.delete({ where: { id: req.params.id } });
+  return res.status(204).send();
+});
+
+adminRouter.get("/options/ram", async (_req, res) => {
+  const items = await prisma.ramOption.findMany({
+    orderBy: [{ sortOrder: "asc" }, { gb: "asc" }]
+  });
+  return res.json({ items });
+});
+
+adminRouter.post("/options/ram", async (req, res) => {
+  const parsed = ramOptionCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
+  }
+
+  const created = await prisma.ramOption.create({ data: parsed.data });
+  return res.status(201).json(created);
+});
+
+adminRouter.put("/options/ram/:id", async (req, res) => {
+  const parsed = ramOptionUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
+  }
+
+  const updated = await prisma.ramOption.update({
+    where: { id: req.params.id },
+    data: parsed.data
+  });
+  return res.json(updated);
+});
+
+adminRouter.delete("/options/ram/:id", async (req, res) => {
+  await prisma.ramOption.delete({ where: { id: req.params.id } });
+  return res.status(204).send();
+});
+
+adminRouter.get("/options/storage", async (_req, res) => {
+  const items = await prisma.storageOption.findMany({
+    orderBy: [{ sortOrder: "asc" }, { gb: "asc" }]
+  });
+  return res.json({ items });
+});
+
+adminRouter.post("/options/storage", async (req, res) => {
+  const parsed = storageOptionCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
+  }
+
+  const created = await prisma.storageOption.create({ data: parsed.data });
+  return res.status(201).json(created);
+});
+
+adminRouter.put("/options/storage/:id", async (req, res) => {
+  const parsed = storageOptionUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
+  }
+
+  const updated = await prisma.storageOption.update({
+    where: { id: req.params.id },
+    data: parsed.data
+  });
+  return res.json(updated);
+});
+
+adminRouter.delete("/options/storage/:id", async (req, res) => {
+  await prisma.storageOption.delete({ where: { id: req.params.id } });
+  return res.status(204).send();
 });

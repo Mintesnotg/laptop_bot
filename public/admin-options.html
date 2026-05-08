@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Options</title>
+  <style>
+    body { font-family: "Segoe UI", Tahoma, sans-serif; margin: 0; padding: 24px; background: #f5f7fb; color: #1f2a44; }
+    .card { background: #fff; border: 1px solid #d7deea; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(300px,1fr)); gap: 16px; }
+    .inline { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    input, button { width: 100%; padding: 8px; border: 1px solid #d7deea; border-radius: 8px; font-size: 13px; }
+    button { background: #0b6cff; color: #fff; border: 0; cursor: pointer; }
+    button.secondary { background: #334155; }
+    button.danger { background: #b42318; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border-bottom: 1px solid #d7deea; padding: 6px 4px; text-align: left; }
+    .status { margin-top: 8px; font-size: 13px; }
+    .error { color: #b42318; }
+    .success { color: #067647; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .topbar a { color: #0b6cff; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Options Management</h1>
+    <a href="/admin">Back to Admin</a>
+  </div>
+
+  <div class="card">
+    <label>Admin JWT Token</label>
+    <input id="tokenInput" placeholder="Paste token if not in localStorage" />
+    <button id="saveTokenBtn" class="secondary">Save Token</button>
+    <p class="status" id="status"></p>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Budget</h2>
+      <table id="budgetTable">
+        <thead><tr><th>Key</th><th>Label</th><th>Min</th><th>Max</th><th>#</th><th>Active</th><th>Action</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="inline"><input id="newBudgetKey" placeholder="key" /><input id="newBudgetLabel" placeholder="label" /></div>
+      <div class="inline"><input id="newBudgetMin" type="number" placeholder="min" /><input id="newBudgetMax" type="number" placeholder="max" /></div>
+      <div class="inline"><input id="newBudgetSort" type="number" placeholder="sortOrder" /><label><input id="newBudgetActive" type="checkbox" checked /> Active</label></div>
+      <button id="addBudgetBtn">Add Budget</button>
+    </section>
+
+    <section class="card">
+      <h2>RAM</h2>
+      <table id="ramTable">
+        <thead><tr><th>GB</th><th>Label</th><th>#</th><th>Active</th><th>Action</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="inline"><input id="newRamGb" type="number" placeholder="gb" /><input id="newRamLabel" placeholder="label" /></div>
+      <div class="inline"><input id="newRamSort" type="number" placeholder="sortOrder" /><label><input id="newRamActive" type="checkbox" checked /> Active</label></div>
+      <button id="addRamBtn">Add RAM</button>
+    </section>
+
+    <section class="card">
+      <h2>Storage</h2>
+      <table id="storageTable">
+        <thead><tr><th>GB</th><th>Label</th><th>#</th><th>Active</th><th>Action</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="inline"><input id="newStorageGb" type="number" placeholder="gb" /><input id="newStorageLabel" placeholder="label" /></div>
+      <div class="inline"><input id="newStorageSort" type="number" placeholder="sortOrder" /><label><input id="newStorageActive" type="checkbox" checked /> Active</label></div>
+      <button id="addStorageBtn">Add Storage</button>
+    </section>
+  </div>
+
+  <script>
+    const state = { token: localStorage.getItem("adminToken") || "" };
+    const statusEl = document.getElementById("status");
+    document.getElementById("tokenInput").value = state.token;
+
+    function setStatus(message, type = "normal") {
+      statusEl.textContent = message;
+      statusEl.className = type === "error" ? "status error" : type === "success" ? "status success" : "status";
+    }
+
+    async function callAdmin(path, options = {}) {
+      if (!state.token) throw new Error("Missing admin token");
+      const response = await fetch(`/api/admin${path}`, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+          Authorization: `Bearer ${state.token}`
+        }
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.message || JSON.stringify(payload.errors || payload) || `Request failed (${response.status})`);
+      }
+      if (response.status === 204) return null;
+      return response.json();
+    }
+
+    async function loadAll() {
+      const [b, r, s] = await Promise.all([
+        callAdmin("/options/budgets"),
+        callAdmin("/options/ram"),
+        callAdmin("/options/storage")
+      ]);
+      renderBudgetRows(b.items || []);
+      renderRamRows(r.items || []);
+      renderStorageRows(s.items || []);
+    }
+
+    function renderBudgetRows(items) {
+      const tbody = document.querySelector("#budgetTable tbody");
+      tbody.innerHTML = "";
+      items.forEach((item) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td><input data-f="key" value="${item.key}" /></td><td><input data-f="label" value="${item.label}" /></td><td><input data-f="min" type="number" value="${item.min}" /></td><td><input data-f="max" type="number" value="${item.max}" /></td><td><input data-f="sortOrder" type="number" value="${item.sortOrder}" /></td><td><input data-f="isActive" type="checkbox" ${item.isActive ? "checked" : ""} /></td><td><button data-a="save" class="secondary">Save</button><button data-a="del" class="danger">Delete</button></td>`;
+        tr.querySelector('[data-a="save"]').addEventListener("click", async () => {
+          await callAdmin(`/options/budgets/${item.id}`, { method: "PUT", body: JSON.stringify({
+            key: tr.querySelector('[data-f="key"]').value.trim(),
+            label: tr.querySelector('[data-f="label"]').value.trim(),
+            min: Number(tr.querySelector('[data-f="min"]').value),
+            max: Number(tr.querySelector('[data-f="max"]').value),
+            sortOrder: Number(tr.querySelector('[data-f="sortOrder"]').value),
+            isActive: tr.querySelector('[data-f="isActive"]').checked
+          })});
+          setStatus("Budget updated", "success");
+          await loadAll();
+        });
+        tr.querySelector('[data-a="del"]').addEventListener("click", async () => {
+          if (!confirm(`Delete ${item.key}?`)) return;
+          await callAdmin(`/options/budgets/${item.id}`, { method: "DELETE" });
+          setStatus("Budget deleted", "success");
+          await loadAll();
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderRamRows(items) {
+      const tbody = document.querySelector("#ramTable tbody");
+      tbody.innerHTML = "";
+      items.forEach((item) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td><input data-f="gb" type="number" value="${item.gb}" /></td><td><input data-f="label" value="${item.label}" /></td><td><input data-f="sortOrder" type="number" value="${item.sortOrder}" /></td><td><input data-f="isActive" type="checkbox" ${item.isActive ? "checked" : ""} /></td><td><button data-a="save" class="secondary">Save</button><button data-a="del" class="danger">Delete</button></td>`;
+        tr.querySelector('[data-a="save"]').addEventListener("click", async () => {
+          await callAdmin(`/options/ram/${item.id}`, { method: "PUT", body: JSON.stringify({
+            gb: Number(tr.querySelector('[data-f="gb"]').value),
+            label: tr.querySelector('[data-f="label"]').value.trim(),
+            sortOrder: Number(tr.querySelector('[data-f="sortOrder"]').value),
+            isActive: tr.querySelector('[data-f="isActive"]').checked
+          })});
+          setStatus("RAM updated", "success");
+          await loadAll();
+        });
+        tr.querySelector('[data-a="del"]').addEventListener("click", async () => {
+          if (!confirm(`Delete ${item.label}?`)) return;
+          await callAdmin(`/options/ram/${item.id}`, { method: "DELETE" });
+          setStatus("RAM deleted", "success");
+          await loadAll();
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderStorageRows(items) {
+      const tbody = document.querySelector("#storageTable tbody");
+      tbody.innerHTML = "";
+      items.forEach((item) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td><input data-f="gb" type="number" value="${item.gb}" /></td><td><input data-f="label" value="${item.label}" /></td><td><input data-f="sortOrder" type="number" value="${item.sortOrder}" /></td><td><input data-f="isActive" type="checkbox" ${item.isActive ? "checked" : ""} /></td><td><button data-a="save" class="secondary">Save</button><button data-a="del" class="danger">Delete</button></td>`;
+        tr.querySelector('[data-a="save"]').addEventListener("click", async () => {
+          await callAdmin(`/options/storage/${item.id}`, { method: "PUT", body: JSON.stringify({
+            gb: Number(tr.querySelector('[data-f="gb"]').value),
+            label: tr.querySelector('[data-f="label"]').value.trim(),
+            sortOrder: Number(tr.querySelector('[data-f="sortOrder"]').value),
+            isActive: tr.querySelector('[data-f="isActive"]').checked
+          })});
+          setStatus("Storage updated", "success");
+          await loadAll();
+        });
+        tr.querySelector('[data-a="del"]').addEventListener("click", async () => {
+          if (!confirm(`Delete ${item.label}?`)) return;
+          await callAdmin(`/options/storage/${item.id}`, { method: "DELETE" });
+          setStatus("Storage deleted", "success");
+          await loadAll();
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById("saveTokenBtn").addEventListener("click", () => {
+      state.token = document.getElementById("tokenInput").value.trim();
+      localStorage.setItem("adminToken", state.token);
+      setStatus("Token saved", "success");
+    });
+
+    document.getElementById("addBudgetBtn").addEventListener("click", async () => {
+      try {
+        await callAdmin("/options/budgets", { method: "POST", body: JSON.stringify({
+          key: document.getElementById("newBudgetKey").value.trim(),
+          label: document.getElementById("newBudgetLabel").value.trim(),
+          min: Number(document.getElementById("newBudgetMin").value),
+          max: Number(document.getElementById("newBudgetMax").value),
+          sortOrder: Number(document.getElementById("newBudgetSort").value || 0),
+          isActive: document.getElementById("newBudgetActive").checked
+        })});
+        setStatus("Budget added", "success");
+        await loadAll();
+      } catch (e) { setStatus(e.message, "error"); }
+    });
+
+    document.getElementById("addRamBtn").addEventListener("click", async () => {
+      try {
+        await callAdmin("/options/ram", { method: "POST", body: JSON.stringify({
+          gb: Number(document.getElementById("newRamGb").value),
+          label: document.getElementById("newRamLabel").value.trim(),
+          sortOrder: Number(document.getElementById("newRamSort").value || 0),
+          isActive: document.getElementById("newRamActive").checked
+        })});
+        setStatus("RAM added", "success");
+        await loadAll();
+      } catch (e) { setStatus(e.message, "error"); }
+    });
+
+    document.getElementById("addStorageBtn").addEventListener("click", async () => {
+      try {
+        await callAdmin("/options/storage", { method: "POST", body: JSON.stringify({
+          gb: Number(document.getElementById("newStorageGb").value),
+          label: document.getElementById("newStorageLabel").value.trim(),
+          sortOrder: Number(document.getElementById("newStorageSort").value || 0),
+          isActive: document.getElementById("newStorageActive").checked
+        })});
+        setStatus("Storage added", "success");
+        await loadAll();
+      } catch (e) { setStatus(e.message, "error"); }
+    });
+
+    if (state.token) {
+      loadAll().catch((e) => setStatus(e.message, "error"));
+    }
+  </script>
+</body>
+</html>
+

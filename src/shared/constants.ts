@@ -15,24 +15,14 @@ export const BUDGET_RANGES: BudgetRange[] = [
 ];
 
 export const USAGE_OPTIONS = [
-  { key: "STUDENT", label: "Student" },
-  { key: "OFFICE", label: "Office" },
-  { key: "DESIGN", label: "Design" },
-  { key: "GAMING", label: "Gaming" },
-  { key: "CODING", label: "Coding" },
-  { key: "GRAPHICS_DESIGN", label: "Graphics Design" },
-  { key: "ARCHITECTURE", label: "Architecture" },
-  { key: "FINANCE", label: "Finance" },
-  { key: "MARKETING", label: "Marketing" },
-  { key: "HR", label: "HR" },
-  { key: "SALES", label: "Sales" },
-  { key: "ENGINEERING", label: "Engineering" },
-  { key: "DEVOPS", label: "DevOps" },
-  { key: "PRODUCT", label: "Product" },
-  { key: "UX_UI", label: "UX/UI" },
-  { key: "ANALYTICS", label: "Analytics" },
-  { key: "READING", label: "Reading" },
-  { key: "DAILY_BROWSING", label: "Daily Browsing" }
+  { key: "STUDENT", label: "Study for Student" },
+  { key: "OFFICE", label: "Office work and business" },
+  { key: "GAMING", label: "Gaming and Entertainment" },
+  { key: "CODING", label: "Coding for Developers" },
+  { key: "GRAPHICS_DESIGN", label: "Graphics Design for Designers" },
+  { key: "UX_UI", label: "UX/UI for Designers" },
+  { key: "TRAVEL", label: "Travel and Tourism" },
+  { key: "DAILY_BROWSING", label: "Daily Browsing and Searching" }
 ] as const;
 
 export const USAGE_KEYS = USAGE_OPTIONS.map((entry) => entry.key) as [

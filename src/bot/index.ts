@@ -5,6 +5,7 @@ import { Markup, Telegraf, session } from "telegraf";
 import { env } from "../env";
 import { findBudgetRange, normalizeUsageKey } from "../shared/constants";
 import { budgetKeyboard, ramKeyboard, resultsKeyboard, storageKeyboard, usageKeyboard } from "./keyboards";
+import { getOptionsSnapshot } from "./optionsClient";
 import { fetchRecommendations } from "./recommendationClient";
 import { BotContext, defaultSession } from "./types";
 
@@ -63,10 +64,11 @@ async function sendOrEdit(ctx: BotContext, text: string, extra?: any) {
 
 async function askBudget(ctx: BotContext) {
   ctx.session.step = "budget";
+  const options = await getOptionsSnapshot();
   await sendOrEdit(
     ctx,
     "Welcome. What is your budget?",
-    budgetKeyboard()
+    budgetKeyboard(options.budgets)
   );
 }
 
@@ -77,12 +79,14 @@ async function askUsage(ctx: BotContext) {
 
 async function askRam(ctx: BotContext) {
   ctx.session.step = "ram";
-  await sendOrEdit(ctx, "Select minimum RAM.", ramKeyboard());
+  const options = await getOptionsSnapshot();
+  await sendOrEdit(ctx, "Select minimum RAM.", ramKeyboard(options.ram));
 }
 
 async function askStorage(ctx: BotContext) {
   ctx.session.step = "storage";
-  await sendOrEdit(ctx, "Select minimum SSD/Storage.", storageKeyboard());
+  const options = await getOptionsSnapshot();
+  await sendOrEdit(ctx, "Select minimum SSD/Storage.", storageKeyboard(options.storage));
 }
 
 async function savePreference(ctx: BotContext) {
@@ -140,24 +144,41 @@ async function showRecommendations(ctx: BotContext) {
 
     ctx.session.step = "results";
 
-    const lines = [
-      "Top laptop suggestions:",
-      `Budget: ${result.filters.budget}`,
-      `Purpose: ${result.filters.usage}`,
-      ""
+    const contactLines = [
+      "📞 Call Now:",
+      "📱 0936677621 OR",
+      "       0963357998",
+      "",
+      "📩 Telegram: @Minteh19"
     ];
 
-    result.items.forEach((item: any, index: number) => {
-      lines.push(
-        `${index + 1}. ${item.brand} ${item.model}`,
-        `Specs: ${item.ramGb}GB RAM / ${item.storageGb}GB ${item.storageType}, ${item.cpu}${item.gpu ? `, ${item.gpu}` : ""}`,
-        `Price: ${Number(item.price).toLocaleString()} ETB`,
-        "CTA: Buy / Contact",
-        ""
-      );
-    });
+    await ctx.reply(
+      ["Top laptop suggestions:", `Budget: ${result.filters.budget}`, `Purpose: ${result.filters.usage}`].join("\n"),
+      Markup.removeKeyboard()
+    );
 
-    await ctx.reply(lines.join("\n"), resultsKeyboard());
+    for (const [index, item] of (result.items as any[]).entries()) {
+      const header = `${index + 1}. ${item.brand} ${item.model}`;
+      const specs = `Specs: ${item.ramGb}GB RAM / ${item.storageGb}GB ${item.storageType}, ${item.cpu}${
+        item.gpu ? `, ${item.gpu}` : ""
+      }`;
+      const price = `Price: ${Number(item.price).toLocaleString()} ETB`;
+
+      const imageUrls: string[] = Array.isArray(item.imageUrls)
+        ? item.imageUrls.filter(Boolean)
+        : item.imageUrl
+          ? [item.imageUrl]
+          : [];
+
+      const album = imageUrls.slice(0, 10).map((url) => ({ type: "photo" as const, media: url }));
+
+      if (album.length > 0) {
+        await ctx.replyWithMediaGroup(album);
+      }
+
+      await ctx.reply([header, specs, price, "", ...contactLines].join("\n"), resultsKeyboard());
+    }
+
   } catch (error) {
     console.error(error);
     await ctx.reply("Something went wrong while fetching recommendations. Please try again.", resultsKeyboard());

@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Laptop Bot Admin</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   <style>
     :root {
       --bg: #f5f7fb;
@@ -84,6 +85,12 @@
       background: #334155;
     }
 
+    .ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
     .danger {
       background: var(--danger);
     }
@@ -152,6 +159,13 @@
       vertical-align: top;
     }
 
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      z-index: 1;
+    }
+
     .pill {
       border-radius: 999px;
       padding: 2px 10px;
@@ -181,6 +195,47 @@
       margin: 0;
       padding: 6px 10px;
       font-size: 12px;
+    }
+
+    .action-buttons {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .icon-btn {
+      width: 30px;
+      height: 30px;
+      margin: 0;
+      padding: 0;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .icon-btn i {
+      font-size: 13px;
+    }
+
+    .icon-btn:hover {
+      background: #eef2ff;
+    }
+
+    .icon-btn.danger {
+      background: #fff5f5;
+      color: var(--danger);
+      border-color: #fecaca;
+    }
+
+    .icon-btn.success {
+      background: #ecfdf3;
+      color: var(--success);
+      border-color: #a6f4c5;
     }
 
     .hidden {
@@ -226,11 +281,134 @@
       font-size: 12px;
       background: #475569;
     }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 50;
+    }
+
+    .modal-backdrop.hidden {
+      display: none;
+    }
+
+    .modal {
+      width: min(860px, 100%);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+      overflow: hidden;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fafc;
+    }
+
+    .modal header h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .modal .body {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+      overflow-y: auto;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      padding: 12px 16px;
+      border-top: 1px solid var(--line);
+      background: #fff;
+      position: sticky;
+      bottom: 0;
+    }
+
+    .modal-actions button {
+      width: auto;
+      margin: 0;
+      min-width: 120px;
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 8px 12px;
+      align-items: baseline;
+      font-size: 13px;
+    }
+
+    .kv .k {
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+    }
+
+    .gallery img {
+      width: 100%;
+      height: 110px;
+      object-fit: cover;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #f1f5f9;
+    }
+
+    .options-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+    }
+
+    .option-box {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      background: #fafcff;
+    }
+
+    .option-box h3 {
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .option-table td,
+    .option-table th {
+      font-size: 12px;
+      padding: 6px 4px;
+    }
+
+    .option-table input {
+      padding: 6px;
+      font-size: 12px;
+    }
   </style>
 </head>
 <body>
   <h1>Laptop Bot Admin</h1>
   <p class="muted">Manage products, upload pictures, and monitor recommendation analytics.</p>
+  <p><a href="/admin/options">Go to Options Page</a></p>
 
   <div class="grid">
     <section class="card">
@@ -274,14 +452,14 @@
           </div>
           <div>
             <label for="ramGb">RAM (GB)</label>
-            <input id="ramGb" type="number" min="1" required />
+            <select id="ramGb" required></select>
           </div>
         </div>
 
         <div class="inline">
           <div>
             <label for="storageGb">Storage (GB)</label>
-            <input id="storageGb" type="number" min="1" required />
+            <select id="storageGb" required></select>
           </div>
           <div>
             <label for="storageType">Storage Type</label>
@@ -335,7 +513,7 @@
         <table id="productsTable">
           <thead>
             <tr>
-              <!-- <th>Image</th> -->
+              <th>Image</th>
               <th>Brand</th>
               <th>Model</th>
               <th>Price</th>
@@ -372,46 +550,131 @@
       <h3>Top Recommended Products</h3>
       <ul id="topProducts"></ul>
     </section>
+
+  </div>
+
+  <div id="productModalBackdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <header>
+        <h3 id="productModalTitle">Product Details</h3>
+        <button id="productModalCloseBtn" class="secondary table-btn" type="button" style="width:auto;">Close</button>
+      </header>
+      <div class="body">
+        <div class="kv" id="productModalKv"></div>
+        <div>
+          <h3 style="margin: 6px 0 8px; font-size: 14px;">Images</h3>
+          <div class="gallery" id="productModalGallery"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="productEditBackdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <header>
+        <h3>Edit Product</h3>
+        <button id="productEditCloseBtn" class="secondary table-btn" type="button" style="width:auto;">Close</button>
+      </header>
+      <div class="body">
+        <input id="editProductId" type="hidden" />
+        <div class="inline">
+          <div><label>Brand</label><input id="editBrand" /></div>
+          <div><label>Model</label><input id="editModel" /></div>
+        </div>
+        <div class="inline">
+          <div><label>Price</label><input id="editPrice" type="number" /></div>
+          <div><label>RAM (GB)</label><select id="editRamGb"></select></div>
+        </div>
+        <div class="inline">
+          <div><label>Storage (GB)</label><select id="editStorageGb"></select></div>
+          <div>
+            <label>Storage Type</label>
+            <select id="editStorageType">
+              <option value="SSD">SSD</option>
+              <option value="NVME">NVME</option>
+              <option value="HDD">HDD</option>
+            </select>
+          </div>
+        </div>
+        <label>CPU</label><input id="editCpu" />
+        <label>GPU</label><input id="editGpu" />
+        <label>Usage Tags</label><div class="chips" id="editUsageTags"></div>
+        <label>Description</label><textarea id="editDescription"></textarea>
+        <label for="editImageFiles">Upload Product Images</label>
+        <input id="editImageFiles" type="file" accept="image/*" multiple />
+        <button id="uploadEditImagesBtn" class="secondary" type="button">Upload Selected Images</button>
+        <div id="editUploadedImages" class="uploaded-list"></div>
+        <label>Image URLs (one per line)</label><textarea id="editImageUrls"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button id="editCancelBtn" class="secondary" type="button">Close</button>
+        <button id="saveEditBtn" class="success" type="button">Save Changes</button>
+      </div>
+    </div>
   </div>
 
   <script>
-    const usageValues = [
-      "STUDENT",
-      "OFFICE",
-      "DESIGN",
-      "GAMING",
-      "CODING",
-      "GRAPHICS_DESIGN",
-      "ARCHITECTURE",
-      "FINANCE",
-      "MARKETING",
-      "HR",
-      "SALES",
-      "ENGINEERING",
-      "DEVOPS",
-      "PRODUCT",
-      "UX/UI",
-      "ANALYTICS",
-      "READING",
-      "DAILY_BROWSING"
-    ];
-
     const state = {
       token: localStorage.getItem("adminToken") || "",
       user: null,
       page: 1,
       pageSize: Number(localStorage.getItem("adminPageSize") || "10"),
       totalPages: 1,
-      uploadedImageUrls: []
+      uploadedImageUrls: [],
+      usageTagsMeta: [],
+      ramOptions: [],
+      storageOptions: []
     };
 
-    const usageContainer = document.getElementById("usageTags");
-    usageValues.forEach((tag) => {
-      const label = document.createElement("label");
-      label.className = "chip";
-      label.innerHTML = `<input type="checkbox" value="${tag}" /> ${tag}`;
-      usageContainer.appendChild(label);
-    });
+    async function loadUsageTags() {
+      const response = await fetch("/api/options/usage-tags");
+      if (!response.ok) {
+        throw new Error("Failed to load usage tags");
+      }
+      return response.json();
+    }
+
+    async function loadMasterOptions() {
+      const [ramResponse, storageResponse] = await Promise.all([fetch("/api/options/ram"), fetch("/api/options/storage")]);
+      if (!ramResponse.ok || !storageResponse.ok) {
+        throw new Error("Failed to load RAM/Storage options");
+      }
+      const ramData = await ramResponse.json();
+      const storageData = await storageResponse.json();
+      state.ramOptions = ramData.items || [];
+      state.storageOptions = storageData.items || [];
+      renderMasterOptionSelects();
+    }
+
+    function renderMasterOptionSelects() {
+      const ramOptionsMarkup = state.ramOptions
+        .map((entry) => `<option value="${entry.gb}">${entry.label}</option>`)
+        .join("");
+      const storageOptionsMarkup = state.storageOptions
+        .map((entry) => `<option value="${entry.gb}">${entry.label}</option>`)
+        .join("");
+
+      document.getElementById("ramGb").innerHTML = ramOptionsMarkup;
+      document.getElementById("storageGb").innerHTML = storageOptionsMarkup;
+      document.getElementById("editRamGb").innerHTML = ramOptionsMarkup;
+      document.getElementById("editStorageGb").innerHTML = storageOptionsMarkup;
+    }
+
+    async function renderUsageTags() {
+      const usageContainer = document.getElementById("usageTags");
+      usageContainer.innerHTML = "";
+
+      const data = await loadUsageTags();
+      const items = data.items || [];
+      state.usageTagsMeta = items;
+
+      items.forEach((tag) => {
+        const label = document.createElement("label");
+        label.className = "chip";
+        label.innerHTML = `<input type="checkbox" value="${tag.key}" /> ${tag.label}`;
+        usageContainer.appendChild(label);
+      });
+    }
 
     const authStatus = document.getElementById("authStatus");
     const productStatus = document.getElementById("productStatus");
@@ -425,6 +688,16 @@
     function setStatus(el, message, type = "normal") {
       el.textContent = message;
       el.className = type === "error" ? "status error" : type === "success" ? "status success-text" : "status";
+    }
+
+    function logoutWithMessage(message) {
+      localStorage.removeItem("adminToken");
+      state.token = "";
+      state.user = null;
+      setAuthenticatedUI();
+      if (message) {
+        setStatus(authStatus, message, "error");
+      }
     }
 
     function setAuthenticatedUI() {
@@ -479,10 +752,7 @@
         }
 
         if (response.status === 401) {
-          localStorage.removeItem("adminToken");
-          state.token = "";
-          state.user = null;
-          setAuthenticatedUI();
+          logoutWithMessage("Session expired. Please login again.");
         }
 
         throw new Error(errMessage);
@@ -496,6 +766,181 @@
         .split(/[,\n]/)
         .map((x) => x.trim())
         .filter(Boolean);
+    }
+
+    function openProductModal(product) {
+      const backdrop = document.getElementById("productModalBackdrop");
+      const title = document.getElementById("productModalTitle");
+      const kv = document.getElementById("productModalKv");
+      const gallery = document.getElementById("productModalGallery");
+
+      title.textContent = `${product.brand} ${product.model}`;
+      kv.innerHTML = "";
+
+      const fields = [
+        ["Price", `${Number(product.price).toLocaleString()} ETB`],
+        ["CPU", product.cpu || "-"],
+        ["GPU", product.gpu || "-"],
+        ["RAM", `${product.ramGb} GB`],
+        ["Storage", `${product.storageGb} GB ${product.storageType}`],
+        ["Usage tags", (product.usageTags || []).join(", ") || "-"],
+        ["Status", product.isActive ? "Active" : "Inactive"],
+        ["Description", product.description || "-"],
+        ["Created", product.createdAt ? new Date(product.createdAt).toLocaleString() : "-"],
+        ["Updated", product.updatedAt ? new Date(product.updatedAt).toLocaleString() : "-"]
+      ];
+
+      for (const [k, v] of fields) {
+        const kEl = document.createElement("div");
+        kEl.className = "k";
+        kEl.textContent = k;
+        const vEl = document.createElement("div");
+        vEl.textContent = String(v);
+        kv.appendChild(kEl);
+        kv.appendChild(vEl);
+      }
+
+      gallery.innerHTML = "";
+      const imgs = (product.images || []).map((x) => x.imageUrl).filter(Boolean);
+      if (imgs.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "muted";
+        empty.textContent = "No images";
+        gallery.appendChild(empty);
+      } else {
+        imgs.forEach((url) => {
+          const img = document.createElement("img");
+          img.src = url;
+          img.alt = "product image";
+          gallery.appendChild(img);
+        });
+      }
+
+      backdrop.classList.remove("hidden");
+    }
+
+    function closeProductModal() {
+      document.getElementById("productModalBackdrop").classList.add("hidden");
+    }
+
+    function openEditModal(product) {
+      document.getElementById("editProductId").value = product.id;
+      document.getElementById("editBrand").value = product.brand || "";
+      document.getElementById("editModel").value = product.model || "";
+      document.getElementById("editPrice").value = product.price ?? "";
+      document.getElementById("editRamGb").value = product.ramGb ?? "";
+      document.getElementById("editStorageGb").value = product.storageGb ?? "";
+      document.getElementById("editStorageType").value = product.storageType || "SSD";
+      document.getElementById("editCpu").value = product.cpu || "";
+      document.getElementById("editGpu").value = product.gpu || "";
+      document.getElementById("editDescription").value = product.description || "";
+      document.getElementById("editImageUrls").value = (product.images || []).map((x) => x.imageUrl).join("\n");
+      renderEditUploadedImages();
+
+      const usageWrap = document.getElementById("editUsageTags");
+      usageWrap.innerHTML = "";
+      (state.usageTagsMeta || []).forEach((tag) => {
+        const label = document.createElement("label");
+        label.className = "chip";
+        const checked = (product.usageTags || []).includes(tag.key) ? "checked" : "";
+        label.innerHTML = `<input type="checkbox" value="${tag.key}" ${checked}/> ${tag.label}`;
+        usageWrap.appendChild(label);
+      });
+
+      document.getElementById("productEditBackdrop").classList.remove("hidden");
+    }
+
+    function closeEditModal() {
+      document.getElementById("editImageFiles").value = "";
+      document.getElementById("productEditBackdrop").classList.add("hidden");
+    }
+
+    function getEditImageUrls() {
+      return normalizeManualImageUrls(document.getElementById("editImageUrls").value || "");
+    }
+
+    function renderEditUploadedImages() {
+      const container = document.getElementById("editUploadedImages");
+      container.innerHTML = "";
+
+      getEditImageUrls().forEach((url, index) => {
+        const item = document.createElement("div");
+        item.className = "uploaded-item";
+
+        const img = document.createElement("img");
+        img.className = "thumb";
+        img.src = url;
+        img.alt = "uploaded image";
+
+        const text = document.createElement("span");
+        text.className = "muted";
+        text.textContent = url;
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.textContent = "Remove";
+        removeBtn.addEventListener("click", () => {
+          const updated = getEditImageUrls();
+          updated.splice(index, 1);
+          document.getElementById("editImageUrls").value = updated.join("\n");
+          renderEditUploadedImages();
+        });
+
+        item.appendChild(img);
+        item.appendChild(text);
+        item.appendChild(removeBtn);
+        container.appendChild(item);
+      });
+    }
+
+    async function uploadEditSelectedImages() {
+      const fileInput = document.getElementById("editImageFiles");
+      const files = Array.from(fileInput.files || []);
+      if (files.length === 0) {
+        setStatus(productStatus, "Choose one or more edit images first.", "error");
+        return;
+      }
+
+      const formData = new FormData();
+      files.forEach((file) => formData.append("images", file));
+      const result = await callAdmin("/uploads", {
+        method: "POST",
+        body: formData
+      });
+
+      const uploadedUrls = (result.files || []).map((file) => file.url);
+      const merged = Array.from(new Set([...getEditImageUrls(), ...uploadedUrls]));
+      document.getElementById("editImageUrls").value = merged.join("\n");
+      fileInput.value = "";
+      renderEditUploadedImages();
+      setStatus(productStatus, `${uploadedUrls.length} edit image(s) uploaded successfully.`, "success");
+    }
+
+    async function saveEditedProduct() {
+      const id = document.getElementById("editProductId").value;
+      const usageTags = Array.from(document.querySelectorAll("#editUsageTags input:checked")).map((el) => el.value);
+      const imageUrls = normalizeManualImageUrls(document.getElementById("editImageUrls").value || "");
+      const payload = {
+        brand: document.getElementById("editBrand").value.trim(),
+        model: document.getElementById("editModel").value.trim(),
+        price: Number(document.getElementById("editPrice").value),
+        ramGb: Number(document.getElementById("editRamGb").value),
+        storageGb: Number(document.getElementById("editStorageGb").value),
+        storageType: document.getElementById("editStorageType").value,
+        cpu: document.getElementById("editCpu").value.trim(),
+        gpu: document.getElementById("editGpu").value.trim() || undefined,
+        usageTags,
+        description: document.getElementById("editDescription").value.trim() || undefined,
+        imageUrls
+      };
+
+      await callAdmin(`/products/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload)
+      });
+      closeEditModal();
+      setStatus(productStatus, "Product updated successfully.", "success");
+      await loadProducts();
     }
 
     function renderUploadedImages() {
@@ -576,17 +1021,17 @@
       for (const product of products) {
         const tr = document.createElement("tr");
 
-        // const imageCell = document.createElement("td");
-        // const firstImage = product.images?.[0]?.imageUrl;
-        // if (firstImage) {
-        //   const img = document.createElement("img");
-        //   img.src = firstImage;
-        //   img.className = "thumb";
-        //   img.alt = `${product.brand} ${product.model}`;
-        //   imageCell.appendChild(img);
-        // } else {
-        //   imageCell.textContent = "-";
-        // }
+        const imageCell = document.createElement("td");
+        const firstImage = product.images?.[0]?.imageUrl;
+        if (firstImage) {
+          const img = document.createElement("img");
+          img.src = firstImage;
+          img.className = "thumb";
+          img.alt = `${product.brand} ${product.model}`;
+          imageCell.appendChild(img);
+        } else {
+          imageCell.textContent = "-";
+        }
 
         const brandCell = document.createElement("td");
         brandCell.textContent = product.brand;
@@ -610,10 +1055,33 @@
         statusCell.appendChild(statusPill);
 
         const actionCell = document.createElement("td");
+        const actionsWrap = document.createElement("div");
+        actionsWrap.className = "action-buttons";
+
+        const detailsBtn = document.createElement("button");
+        detailsBtn.type = "button";
+        detailsBtn.className = "icon-btn";
+        detailsBtn.title = "Details";
+        detailsBtn.setAttribute("aria-label", "Details");
+        detailsBtn.innerHTML = '<i class="fa-solid fa-circle-info"></i>';
+        detailsBtn.addEventListener("click", () => openProductModal(product));
+
+        const editBtn = document.createElement("button");
+        editBtn.type = "button";
+        editBtn.className = "icon-btn";
+        editBtn.title = "Edit";
+        editBtn.setAttribute("aria-label", "Edit");
+        editBtn.innerHTML = '<i class="fa-solid fa-pen-to-square"></i>';
+        editBtn.addEventListener("click", () => openEditModal(product));
+
         const toggleBtn = document.createElement("button");
         toggleBtn.type = "button";
-        toggleBtn.className = `table-btn ${product.isActive ? "danger" : "success"}`;
-        toggleBtn.textContent = product.isActive ? "Deactivate" : "Activate";
+        toggleBtn.className = `icon-btn ${product.isActive ? "danger" : "success"}`;
+        toggleBtn.title = product.isActive ? "Deactivate" : "Activate";
+        toggleBtn.setAttribute("aria-label", product.isActive ? "Deactivate" : "Activate");
+        toggleBtn.innerHTML = product.isActive
+          ? '<i class="fa-solid fa-power-off"></i>'
+          : '<i class="fa-solid fa-check"></i>';
         toggleBtn.addEventListener("click", async () => {
           const nextStatus = !product.isActive;
           const action = nextStatus ? "activate" : "deactivate";
@@ -631,9 +1099,12 @@
           await loadProducts();
         });
 
-        actionCell.appendChild(toggleBtn);
+        actionsWrap.appendChild(detailsBtn);
+        actionsWrap.appendChild(editBtn);
+        actionsWrap.appendChild(toggleBtn);
+        actionCell.appendChild(actionsWrap);
 
-      //  tr.appendChild(imageCell);
+        tr.appendChild(imageCell);
         tr.appendChild(brandCell);
         tr.appendChild(modelCell);
         tr.appendChild(priceCell);
@@ -671,6 +1142,13 @@
 
     async function bootstrap() {
       setAuthenticatedUI();
+
+      try {
+        await renderUsageTags();
+        await loadMasterOptions();
+      } catch (error) {
+        setStatus(productStatus, error.message, "error");
+      }
 
       if (!state.token) {
         return;
@@ -786,6 +1264,27 @@
       }
     });
 
+    document.getElementById("saveEditBtn").addEventListener("click", async () => {
+      try {
+        await saveEditedProduct();
+      } catch (error) {
+        setStatus(productStatus, error.message, "error");
+      }
+    });
+
+    document.getElementById("uploadEditImagesBtn").addEventListener("click", async () => {
+      try {
+        await uploadEditSelectedImages();
+      } catch (error) {
+        setStatus(productStatus, error.message, "error");
+      }
+    });
+
+    document.getElementById("editImageUrls").addEventListener("input", () => {
+      renderEditUploadedImages();
+    });
+
+
     document.getElementById("productForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       if (createProductBtn.disabled) {
@@ -837,6 +1336,20 @@
     });
 
     bootstrap();
+
+    document.getElementById("productModalCloseBtn").addEventListener("click", closeProductModal);
+    document.getElementById("productModalBackdrop").addEventListener("click", (event) => {
+      if (event.target && event.target.id === "productModalBackdrop") {
+        closeProductModal();
+      }
+    });
+    document.getElementById("productEditCloseBtn").addEventListener("click", closeEditModal);
+    document.getElementById("editCancelBtn").addEventListener("click", closeEditModal);
+    document.getElementById("productEditBackdrop").addEventListener("click", (event) => {
+      if (event.target && event.target.id === "productEditBackdrop") {
+        closeEditModal();
+      }
+    });
   </script>
 </body>
 </html>

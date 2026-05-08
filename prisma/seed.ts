@@ -2,6 +2,7 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { StorageType, UsageTag } from "@prisma/client";
 import { prisma } from "../src/prisma";
+import { BUDGET_RANGES, RAM_OPTIONS, STORAGE_OPTIONS } from "../src/shared/constants";
 
 type SeedProduct = {
   brand: string;
@@ -155,6 +156,61 @@ async function main() {
   const adminPassword = process.env.ADMIN_BOOTSTRAP_PASSWORD ?? "admin12345";
   const adminDisplayName = process.env.ADMIN_BOOTSTRAP_DISPLAY_NAME ?? "Administrator";
   const passwordHash = await bcrypt.hash(adminPassword, 10);
+
+  for (const [index, entry] of BUDGET_RANGES.entries()) {
+    await prisma.budgetOption.upsert({
+      where: { key: entry.key },
+      update: {
+        label: entry.label,
+        min: entry.min,
+        max: entry.max,
+        sortOrder: index,
+        isActive: true
+      },
+      create: {
+        key: entry.key,
+        label: entry.label,
+        min: entry.min,
+        max: entry.max,
+        sortOrder: index,
+        isActive: true
+      }
+    });
+  }
+
+  for (const [index, entry] of RAM_OPTIONS.entries()) {
+    await prisma.ramOption.upsert({
+      where: { gb: entry.gb },
+      update: {
+        label: entry.label,
+        sortOrder: index,
+        isActive: true
+      },
+      create: {
+        gb: entry.gb,
+        label: entry.label,
+        sortOrder: index,
+        isActive: true
+      }
+    });
+  }
+
+  for (const [index, entry] of STORAGE_OPTIONS.entries()) {
+    await prisma.storageOption.upsert({
+      where: { gb: entry.gb },
+      update: {
+        label: entry.label,
+        sortOrder: index,
+        isActive: true
+      },
+      create: {
+        gb: entry.gb,
+        label: entry.label,
+        sortOrder: index,
+        isActive: true
+      }
+    });
+  }
 
   await prisma.adminUser.upsert({
     where: { username: adminUsername },
