@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
+import { UsageTag } from "@prisma/client";
 import { Markup, Telegraf, session } from "telegraf";
 import { env } from "../env";
-import { findBudgetRange, normalizeUsageKey } from "../shared/constants";
+import { findBudgetRange, normalizeUsageKey, usageLabelFromKey } from "../shared/constants";
 import { budgetKeyboard, ramKeyboard, resultsKeyboard, storageKeyboard, usageKeyboard } from "./keyboards";
 import { getOptionsSnapshot } from "./optionsClient";
 import { fetchRecommendations } from "./recommendationClient";
@@ -74,7 +75,13 @@ async function askBudget(ctx: BotContext) {
 
 async function askUsage(ctx: BotContext) {
   ctx.session.step = "usage";
-  await sendOrEdit(ctx, "What will you use it for?", usageKeyboard());
+  const selectedLabels = ctx.session.usageSelections.map((key) => usageLabelFromKey(key));
+  const selectedText = selectedLabels.length > 0 ? `\nSelected: ${selectedLabels.join(", ")}` : "\nSelected: none yet";
+  await sendOrEdit(
+    ctx,
+    `What will you use it for? (select one or more, then tap Done)${selectedText}`,
+    usageKeyboard(ctx.session.usageSelections)
+  );
 }
 
 async function askRam(ctx: BotContext) {
@@ -91,8 +98,11 @@ async function askStorage(ctx: BotContext) {
 
 async function savePreference(ctx: BotContext) {
   const budget = findBudgetRange(ctx.session.budgetKey ?? "");
+  const validUsageValues = new Set(Object.values(UsageTag));
+  const primaryUsage =
+    ctx.session.usageSelections.find((usage) => validUsageValues.has(usage as UsageTag)) ?? UsageTag.DAILY_BROWSING;
 
-  if (!budget || !ctx.from || !ctx.session.usage || !ctx.session.ramGb || !ctx.session.storageGb) {
+  if (!budget || !ctx.from || !primaryUsage || !ctx.session.ramGb || !ctx.session.storageGb) {
     return;
   }
 
@@ -107,7 +117,7 @@ async function savePreference(ctx: BotContext) {
       languageCode: ctx.from.language_code,
       budgetMin: budget.min,
       budgetMax: budget.max,
-      usageTag: ctx.session.usage,
+      usageTag: primaryUsage,
       ramGb: ctx.session.ramGb,
       storageGb: ctx.session.storageGb
     })
@@ -115,7 +125,12 @@ async function savePreference(ctx: BotContext) {
 }
 
 async function showRecommendations(ctx: BotContext) {
-  if (!ctx.session.budgetKey || !ctx.session.usage || !ctx.session.ramGb || !ctx.session.storageGb) {
+  if (
+    !ctx.session.budgetKey ||
+    ctx.session.usageSelections.length === 0 ||
+    !ctx.session.ramGb ||
+    !ctx.session.storageGb
+  ) {
     await askBudget(ctx);
     return;
   }
@@ -128,7 +143,7 @@ async function showRecommendations(ctx: BotContext) {
     const result = await fetchRecommendations({
       telegramUserId: ctx.from ? BigInt(ctx.from.id) : undefined,
       budgetKey: ctx.session.budgetKey,
-      usage: ctx.session.usage,
+      usage: ctx.session.usageSelections,
       ramGb: ctx.session.ramGb,
       storageGb: ctx.session.storageGb,
       limit: 5
@@ -153,7 +168,11 @@ async function showRecommendations(ctx: BotContext) {
     ];
 
     await ctx.reply(
-      ["Top laptop suggestions:", `Budget: ${result.filters.budget}`, `Purpose: ${result.filters.usage}`].join("\n"),
+      [
+        "Top laptop suggestions:",
+        `Budget: ${result.filters.budget}`,
+        `Purpose: ${Array.isArray(result.filters.usage) ? result.filters.usage.join(", ") : result.filters.usage}`
+      ].join("\n"),
       Markup.removeKeyboard()
     );
 
@@ -204,14 +223,14 @@ bot.command("help", async (ctx) => {
 bot.action(/^budget:(.+)$/i, async (ctx) => {
   const typedCtx = ctx as unknown as BotContext;
   typedCtx.session.budgetKey = ctx.match[1];
-  delete typedCtx.session.usage;
+  typedCtx.session.usageSelections = [];
   delete typedCtx.session.ramGb;
   delete typedCtx.session.storageGb;
   await ctx.answerCbQuery();
   await askUsage(typedCtx);
 });
 
-bot.action(/^usage:(.+)$/i, async (ctx) => {
+bot.action(/^usage_toggle:(.+)$/i, async (ctx) => {
   const typedCtx = ctx as unknown as BotContext;
   const normalizedUsage = normalizeUsageKey(ctx.match[1]);
   if (!normalizedUsage) {
@@ -219,7 +238,25 @@ bot.action(/^usage:(.+)$/i, async (ctx) => {
     return;
   }
 
-  typedCtx.session.usage = normalizedUsage;
+  const currentSelections = typedCtx.session.usageSelections || [];
+  const alreadySelected = currentSelections.includes(normalizedUsage);
+  typedCtx.session.usageSelections = alreadySelected
+    ? currentSelections.filter((entry) => entry !== normalizedUsage)
+    : [...currentSelections, normalizedUsage];
+  delete typedCtx.session.ramGb;
+  delete typedCtx.session.storageGb;
+  await ctx.answerCbQuery(alreadySelected ? "Removed" : "Added");
+  await askUsage(typedCtx);
+});
+
+bot.action("usage_done", async (ctx) => {
+  const typedCtx = ctx as unknown as BotContext;
+  if (!typedCtx.session.usageSelections || typedCtx.session.usageSelections.length === 0) {
+    await ctx.answerCbQuery("Select at least one usage type.");
+    await askUsage(typedCtx);
+    return;
+  }
+
   delete typedCtx.session.ramGb;
   delete typedCtx.session.storageGb;
   await ctx.answerCbQuery();
@@ -253,7 +290,7 @@ bot.action(/^back:(budget|usage|ram)$/i, async (ctx) => {
   }
 
   if (step === "usage") {
-    delete typedCtx.session.usage;
+    typedCtx.session.usageSelections = [];
     delete typedCtx.session.ramGb;
     delete typedCtx.session.storageGb;
     await askUsage(typedCtx);

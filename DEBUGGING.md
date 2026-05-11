@@ -1,28 +1,38 @@
-## Bot → API debugging (local)
+## Bot -> API debugging (local)
 
-### Run
+### Recommended VS Code debug profile
+- Open Run and Debug in VS Code.
+- Start `Debug API + Bot (tsx)` from `.vscode/launch.json`.
+- This runs `npm run dev` through `tsx`, so breakpoints in `src/**/*.ts` are hit correctly.
+
+### Attach mode (optional)
+If you already started the app in terminal and want to attach:
+1. Start with inspector enabled:
+   - PowerShell: `$env:NODE_OPTIONS="--inspect=9229"; npm run dev`
+2. In VS Code run `Attach API + Bot (9229)`.
+
+### Run without debugger
 - `npm run dev`
 - Open Admin UI: `http://localhost:3000/admin`
 
-### Bot → API request flow (what calls what)
-- Bot builds keyboards: `src/bot/keyboards.ts`
-- Bot collects session state + triggers request: `src/bot/index.ts` (`showRecommendations()`)
-- Bot calls API: `src/bot/recommendationClient.ts` (`fetchRecommendations()`)
-- API validates request: `src/api/routes/recommendationRoutes.ts`
-- Recommendation logic + DB queries: `src/services/recommendationService.ts` (`recommendLaptops()`)
+### Bot -> API request flow (what calls what)
+- Bot keyboards and callbacks: `src/bot/index.ts`, `src/bot/keyboards.ts`
+- Bot API client: `src/bot/recommendationClient.ts`
+- API input validation: `src/api/routes/recommendationRoutes.ts`
+- Recommendation logic and ranking: `src/services/recommendationService.ts`
 
-### Best breakpoint / log points
-- **Bot payload**: `src/bot/recommendationClient.ts` in `fetchRecommendations(payload)`
-  - Inspect: `payload`, `response.status`, `await response.text()` on failure
-- **Bot session state**: `src/bot/index.ts` in `showRecommendations(ctx)`
-  - Inspect: `ctx.session` (`budgetKey`, `usage`, `ramGb`, `storageGb`)
-- **API validation**: `src/api/routes/recommendationRoutes.ts`
-  - Inspect: `parsed.success`, `parsed.error.flatten()`
-- **DB query + ranking**: `src/services/recommendationService.ts` in `recommendLaptops(filters)`
-  - Inspect: `budget`, `products.length`, `ranked[0..]`, `topResults`
+### Best breakpoint points
+- Bot multi-usage selection handling:
+  - `src/bot/index.ts` at `bot.action(/^usage_toggle:(.+)$/i, ...)`
+  - `src/bot/index.ts` at `bot.action("usage_done", ...)`
+- Bot outbound recommendation payload:
+  - `src/bot/recommendationClient.ts` at `fetchRecommendations(payload)`
+- API validation boundary:
+  - `src/api/routes/recommendationRoutes.ts` at `safeParse(req.body)`
+- Ranking and usage match behavior:
+  - `src/services/recommendationService.ts` at `recommendLaptops(filters)`
 
 ### Correlation ID
-The API assigns an `x-request-id` to every request and logs one line per request.
-- If you send an `x-request-id` header from the bot, the API will reuse it.
-- This makes it easy to grep logs for one end-to-end run.
-
+The API logs each request with `x-request-id`.
+- Bot calls set `x-request-id` as `bot-rec:<uuid>`.
+- Use this ID to trace one request end-to-end in logs.

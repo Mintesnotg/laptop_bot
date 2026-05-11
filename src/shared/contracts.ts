@@ -14,6 +14,12 @@ export const usageTagSchema = z.string().transform((value, ctx) => {
   return normalized as UsageKey;
 });
 
+export const usageTagsSchema = z.array(usageTagSchema).min(1).transform((values) => Array.from(new Set(values)));
+
+const recommendationUsageSchema = z
+  .union([usageTagSchema, z.array(usageTagSchema).min(1)])
+  .transform((value) => (Array.isArray(value) ? Array.from(new Set(value)) : [value]));
+
 const imageLocationSchema = z.string().refine((value) => {
   if (value.startsWith("/uploads/")) {
     return true;
@@ -30,7 +36,7 @@ const imageLocationSchema = z.string().refine((value) => {
 export const recommendationRequestSchema = z.object({
   telegramUserId: z.coerce.bigint().optional(),
   budgetKey: z.enum(BUDGET_KEYS),
-  usage: usageTagSchema,
+  usage: recommendationUsageSchema,
   ramGb: z.number().int().min(4),
   storageGb: z.number().int().min(128),
   limit: z.number().int().min(1).max(10).default(5)
@@ -47,7 +53,7 @@ export const productCreateSchema = z.object({
   storageType: z.enum(["SSD", "NVME", "HDD"]),
   cpu: z.string().min(1),
   gpu: z.string().optional(),
-  usageTags: z.array(usageTagSchema).min(1),
+  usageTags: usageTagsSchema,
   description: z.string().optional(),
   imageUrls: z.array(imageLocationSchema).default([])
 });

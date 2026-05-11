@@ -7,7 +7,7 @@ export type RecommendationUsage = UsageKey | "UX/UI";
 type RecommendationPayload = {
   telegramUserId?: bigint;
   budgetKey: string;
-  usage: RecommendationUsage;
+  usage: RecommendationUsage[];
   ramGb: number;
   storageGb: number;
   limit?: number;
@@ -28,7 +28,7 @@ export async function fetchRecommendations(payload: RecommendationPayload) {
     },
     body: JSON.stringify({
       ...payload,
-      usage: toApiUsageValue(payload.usage),
+      usage: payload.usage.map((entry) => toApiUsageValue(entry)),
       telegramUserId: payload.telegramUserId ? payload.telegramUserId.toString() : undefined,
       limit: payload.limit ?? 5
     })

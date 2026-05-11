@@ -36,13 +36,17 @@ function scoreProduct(
   const ramDelta = Math.max(0, ramGb - filters.ramGb);
   const storageDelta = Math.max(0, storageGb - filters.storageGb);
 
-  const usageScore = usageTags.includes(filters.usage as UsageTag) ? 35 : 0;
+  const selectedUsageSet = new Set(filters.usage as UsageTag[]);
+  const matchedUsageCount = usageTags.reduce((count, tag) => (selectedUsageSet.has(tag) ? count + 1 : count), 0);
+
+  const usageScore = matchedUsageCount > 0 ? 22 + Math.min(18, matchedUsageCount * 9) : 0;
   const priceScore = normalizedPrice * 30;
   const ramScore = Math.min(15, ramDelta * 2 + (ramGb >= filters.ramGb ? 8 : 0));
   const storageScore = Math.min(15, storageDelta / 128 + (storageGb >= filters.storageGb ? 8 : 0));
 
+  const hasHeavyWorkload = filters.usage.some((usage) => usage === "GAMING" || usage === "GRAPHICS_DESIGN");
   const workloadBoost =
-    filters.usage === "GAMING" || filters.usage === "GRAPHICS_DESIGN"
+    hasHeavyWorkload
       ? ramGb >= 16
         ? 5
         : 0
@@ -106,17 +110,23 @@ export async function recommendLaptops(filters: RecommendationRequestInput) {
     }))
     .sort((a, b) => b.score - a.score);
 
-  const exactUsageMatches = ranked.filter((product) => product.usageTags.includes(filters.usage as UsageTag));
+  const enumUsageValues = new Set(Object.values(UsageTag));
+  const validUsageSelections = filters.usage.filter((usage) => enumUsageValues.has(usage as UsageTag)) as UsageTag[];
+  const selectedUsageSet = new Set(validUsageSelections);
+  const exactUsageMatches = ranked.filter((product) => product.usageTags.some((tag) => selectedUsageSet.has(tag)));
   const topResults = (exactUsageMatches.length > 0 ? exactUsageMatches : ranked)
     .sort((a, b) => b.score - a.score)
     .slice(0, filters.limit);
+
+  const primaryUsage = (validUsageSelections[0] ?? UsageTag.DAILY_BROWSING) as UsageTag;
+  const usageLabels = filters.usage.map((usage) => usageLabelFromKey(usage));
 
   const request = await prisma.recommendationRequest.create({
     data: {
       telegramUserId: userId,
       budgetMin: budget.min,
       budgetMax: budget.max,
-      usageTag: filters.usage as UsageTag,
+      usageTag: primaryUsage,
       ramGb: filters.ramGb,
       storageGb: filters.storageGb
     }
@@ -140,7 +150,9 @@ export async function recommendLaptops(filters: RecommendationRequestInput) {
       payload: {
         budgetKey: filters.budgetKey,
         budgetLabel: budget.label,
-        usageLabel: usageLabelFromKey(filters.usage),
+        usageLabel: usageLabels[0] ?? "-",
+        usageLabels,
+        usageKeys: filters.usage,
         ramGb: filters.ramGb,
         storageGb: filters.storageGb,
         resultsCount: topResults.length
@@ -151,7 +163,7 @@ export async function recommendLaptops(filters: RecommendationRequestInput) {
   return {
     filters: {
       budget: budget.label,
-      usage: usageLabelFromKey(filters.usage),
+      usage: usageLabels,
       ramGb: filters.ramGb,
       storageGb: filters.storageGb
     },

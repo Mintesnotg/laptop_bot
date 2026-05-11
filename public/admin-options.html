@@ -20,6 +20,7 @@
     .success { color: #067647; }
     .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
     .topbar a { color: #0b6cff; text-decoration: none; }
+    .muted { color: #64748b; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -29,9 +30,12 @@
   </div>
 
   <div class="card">
-    <label>Admin JWT Token</label>
-    <input id="tokenInput" placeholder="Paste token if not in localStorage" />
-    <button id="saveTokenBtn" class="secondary">Save Token</button>
+    <h2>Telegram Channel Auto Post</h2>
+    <p class="muted">Set your public channel username (for example, @my_channel) to auto-post newly created products.</p>
+    <div class="inline">
+      <input id="channelTargetInput" placeholder="@my_channel or -1001234567890" />
+      <button id="saveChannelTargetBtn" class="secondary">Save Channel Target</button>
+    </div>
     <p class="status" id="status"></p>
   </div>
 
@@ -74,15 +78,26 @@
   <script>
     const state = { token: localStorage.getItem("adminToken") || "" };
     const statusEl = document.getElementById("status");
-    document.getElementById("tokenInput").value = state.token;
 
     function setStatus(message, type = "normal") {
       statusEl.textContent = message;
       statusEl.className = type === "error" ? "status error" : type === "success" ? "status success" : "status";
     }
 
+    function ensureAuthToken() {
+      if (state.token) {
+        return true;
+      }
+
+      setStatus("Missing admin login token. Please login from /admin first.", "error");
+      return false;
+    }
+
     async function callAdmin(path, options = {}) {
-      if (!state.token) throw new Error("Missing admin token");
+      if (!ensureAuthToken()) {
+        throw new Error("Missing admin token");
+      }
+
       const response = await fetch(`/api/admin${path}`, {
         ...options,
         headers: {
@@ -91,23 +106,35 @@
           Authorization: `Bearer ${state.token}`
         }
       });
+
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          localStorage.removeItem("adminToken");
+          state.token = "";
+        }
         throw new Error(payload.message || JSON.stringify(payload.errors || payload) || `Request failed (${response.status})`);
       }
-      if (response.status === 204) return null;
+
+      if (response.status === 204) {
+        return null;
+      }
+
       return response.json();
     }
 
     async function loadAll() {
-      const [b, r, s] = await Promise.all([
+      const [channel, budgets, ram, storage] = await Promise.all([
+        callAdmin("/options/channel"),
         callAdmin("/options/budgets"),
         callAdmin("/options/ram"),
         callAdmin("/options/storage")
       ]);
-      renderBudgetRows(b.items || []);
-      renderRamRows(r.items || []);
-      renderStorageRows(s.items || []);
+
+      document.getElementById("channelTargetInput").value = channel.channelTarget || "";
+      renderBudgetRows(budgets.items || []);
+      renderRamRows(ram.items || []);
+      renderStorageRows(storage.items || []);
     }
 
     function renderBudgetRows(items) {
@@ -190,10 +217,18 @@
       });
     }
 
-    document.getElementById("saveTokenBtn").addEventListener("click", () => {
-      state.token = document.getElementById("tokenInput").value.trim();
-      localStorage.setItem("adminToken", state.token);
-      setStatus("Token saved", "success");
+    document.getElementById("saveChannelTargetBtn").addEventListener("click", async () => {
+      try {
+        await callAdmin("/options/channel", {
+          method: "PUT",
+          body: JSON.stringify({
+            channelTarget: document.getElementById("channelTargetInput").value.trim()
+          })
+        });
+        setStatus("Channel target saved", "success");
+      } catch (e) {
+        setStatus(e.message, "error");
+      }
     });
 
     document.getElementById("addBudgetBtn").addEventListener("click", async () => {
@@ -239,8 +274,9 @@
 
     if (state.token) {
       loadAll().catch((e) => setStatus(e.message, "error"));
+    } else {
+      setStatus("Missing admin login token. Please login from /admin first.", "error");
     }
   </script>
 </body>
 </html>
-

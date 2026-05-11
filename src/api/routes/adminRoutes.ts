@@ -9,6 +9,7 @@ import path from "node:path";
 import { z } from "zod";
 import { env } from "../../env";
 import { prisma } from "../../prisma";
+import { postProductToTelegramChannel } from "../../services/telegramChannelPublisher";
 import { productCreateSchema } from "../../shared/contracts";
 import { requireAdminAuth } from "../middleware/requireAdminAuth";
 
@@ -57,6 +58,11 @@ const storageOptionCreateSchema = z.object({
 });
 
 const storageOptionUpdateSchema = storageOptionCreateSchema.partial();
+const channelOptionUpdateSchema = z.object({
+  channelTarget: z.string().trim().max(255)
+});
+
+const TELEGRAM_CHANNEL_SETTING_KEY = "telegramChannelTarget";
 
 const uploadDirAbsolutePath = path.resolve(process.cwd(), env.ADMIN_UPLOAD_DIR);
 
@@ -94,6 +100,15 @@ const upload = multer({
 });
 
 export const adminRouter = Router();
+
+async function getTelegramChannelTarget() {
+  const setting = await prisma.appSetting.findUnique({
+    where: { key: TELEGRAM_CHANNEL_SETTING_KEY },
+    select: { value: true }
+  });
+
+  return setting?.value?.trim() ?? "";
+}
 
 adminRouter.post("/auth/login", async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
@@ -164,6 +179,29 @@ adminRouter.get("/auth/me", requireAdminAuth, async (req, res) => {
 });
 
 adminRouter.use(requireAdminAuth);
+
+adminRouter.get("/options/channel", async (_req, res) => {
+  const channelTarget = await getTelegramChannelTarget();
+  return res.json({ channelTarget });
+});
+
+adminRouter.put("/options/channel", async (req, res) => {
+  const parsed = channelOptionUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
+  }
+
+  const setting = await prisma.appSetting.upsert({
+    where: { key: TELEGRAM_CHANNEL_SETTING_KEY },
+    update: { value: parsed.data.channelTarget },
+    create: {
+      key: TELEGRAM_CHANNEL_SETTING_KEY,
+      value: parsed.data.channelTarget
+    }
+  });
+
+  return res.json({ channelTarget: setting.value });
+});
 
 adminRouter.get("/products", async (req, res) => {
   const parsed = listProductsQuerySchema.safeParse(req.query);
@@ -240,7 +278,24 @@ adminRouter.post("/products", async (req, res) => {
     }
   });
 
-  return res.status(201).json(product);
+  const channelTarget = await getTelegramChannelTarget();
+  const channelPost = channelTarget
+    ? await postProductToTelegramChannel(channelTarget, product)
+    : {
+        attempted: false,
+        success: false,
+        message: "Channel target is not configured."
+      };
+
+  if (channelPost.attempted && !channelPost.success) {
+    console.error("Telegram channel post failed", {
+      productId: product.id,
+      channelTarget,
+      message: channelPost.message
+    });
+  }
+
+  return res.status(201).json({ ...product, channelPost });
 });
 
 adminRouter.put("/products/:id", async (req, res) => {

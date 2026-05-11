@@ -1316,12 +1316,17 @@
       createProductBtn.textContent = "Creating...";
 
       try {
-        await callAdmin("/products", {
+        const created = await callAdmin("/products", {
           method: "POST",
           body: JSON.stringify(payload)
         });
 
-        setStatus(productStatus, "Product created successfully.", "success");
+        if (created?.channelPost?.attempted && !created?.channelPost?.success) {
+          const warning = created.channelPost.message || "Channel post failed.";
+          setStatus(productStatus, `Product created. Telegram channel post warning: ${warning}`, "error");
+        } else {
+          setStatus(productStatus, "Product created successfully.", "success");
+        }
         document.getElementById("productForm").reset();
         state.uploadedImageUrls = [];
         renderUploadedImages();

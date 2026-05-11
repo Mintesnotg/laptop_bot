@@ -7,7 +7,7 @@ export type BotStep = "idle" | "budget" | "usage" | "ram" | "storage" | "results
 export type BotSession = {
   step: BotStep;
   budgetKey?: string;
-  usage?: UsageKey;
+  usageSelections: UsageKey[];
   ramGb?: number;
   storageGb?: number;
 };
@@ -17,5 +17,6 @@ export type BotContext = Context<Update> & {
 };
 
 export const defaultSession: BotSession = {
-  step: "idle"
+  step: "idle",
+  usageSelections: []
 };

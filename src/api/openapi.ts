@@ -47,7 +47,16 @@ export const openApiDocument = {
         properties: {
           telegramUserId: { type: "string", example: "123456789" },
           budgetKey: { $ref: "#/components/schemas/BudgetKey" },
-          usage: { $ref: "#/components/schemas/UsageInput" },
+          usage: {
+            oneOf: [
+              { $ref: "#/components/schemas/UsageInput" },
+              {
+                type: "array",
+                minItems: 1,
+                items: { $ref: "#/components/schemas/UsageInput" }
+              }
+            ]
+          },
           ramGb: { type: "integer", minimum: 4, example: 16 },
           storageGb: { type: "integer", minimum: 128, example: 512 },
           limit: { type: "integer", minimum: 1, maximum: 10, default: 5 }
@@ -60,7 +69,10 @@ export const openApiDocument = {
             type: "object",
             properties: {
               budget: { type: "string" },
-              usage: { type: "string" },
+              usage: {
+                type: "array",
+                items: { type: "string" }
+              },
               ramGb: { type: "integer" },
               storageGb: { type: "integer" }
             }
@@ -155,6 +167,27 @@ export const openApiDocument = {
         required: ["isActive"],
         properties: {
           isActive: { type: "boolean" }
+        }
+      },
+      ChannelOptionInput: {
+        type: "object",
+        required: ["channelTarget"],
+        properties: {
+          channelTarget: { type: "string", example: "@my_channel" }
+        }
+      },
+      ChannelOptionResponse: {
+        type: "object",
+        properties: {
+          channelTarget: { type: "string" }
+        }
+      },
+      ChannelPostResult: {
+        type: "object",
+        properties: {
+          attempted: { type: "boolean" },
+          success: { type: "boolean" },
+          message: { type: "string" }
         }
       },
       ProductListResponse: {
@@ -348,7 +381,63 @@ export const openApiDocument = {
           }
         },
         responses: {
-          "201": { description: "Product created" },
+          "201": {
+            description: "Product created",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    brand: { type: "string" },
+                    model: { type: "string" },
+                    channelPost: { $ref: "#/components/schemas/ChannelPostResult" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { description: "Validation error" }
+        }
+      }
+    },
+    "/api/admin/options/channel": {
+      get: {
+        tags: ["Admin"],
+        summary: "Get channel auto-post target",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        responses: {
+          "200": {
+            description: "Current channel target",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ChannelOptionResponse" }
+              }
+            }
+          }
+        }
+      },
+      put: {
+        tags: ["Admin"],
+        summary: "Set channel auto-post target",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ChannelOptionInput" }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Updated channel target",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ChannelOptionResponse" }
+              }
+            }
+          },
           "400": { description: "Validation error" }
         }
       }
