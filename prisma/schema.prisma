@@ -33,6 +33,12 @@ enum StorageType {
   HDD
 }
 
+enum ChannelPostKind {
+  TEXT
+  PHOTO
+  ALBUM
+}
+
 model TelegramUser {
   id                     Int                     @id @default(autoincrement())
   telegramUserId         BigInt                  @unique
@@ -77,11 +83,11 @@ model Product {
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   images                ProductImage[]
+  channelPublication    ProductChannelPublication?
   recommendationResults RecommendationResult[]
 
   @@index([price])
   @@index([ramGb, storageGb])
-  @@unique([brand, model])
 }
 
 model ProductImage {
@@ -92,6 +98,23 @@ model ProductImage {
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
+}
+
+model ProductChannelPublication {
+  id               String          @id @default(cuid())
+  productId        String          @unique
+  channelTarget    String
+  postKind         ChannelPostKind
+  messageIds       String[]        @default([])
+  imageUrlsSnapshot String[]       @default([])
+  lastPublishedAt  DateTime
+  lastSyncedAt     DateTime
+  lastSyncError    String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  product          Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([channelTarget])
 }
 
 model RecommendationRequest {

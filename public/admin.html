@@ -520,6 +520,7 @@
               <th>RAM</th>
               <th>Storage</th>
               <th>Status</th>
+              <th>Channel</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -627,7 +628,7 @@
     };
 
     async function loadUsageTags() {
-      const response = await fetch("/api/options/usage-tags");
+      const response = await fetch("/api/options/usage-tags", { cache: "no-store" });
       if (!response.ok) {
         throw new Error("Failed to load usage tags");
       }
@@ -635,7 +636,10 @@
     }
 
     async function loadMasterOptions() {
-      const [ramResponse, storageResponse] = await Promise.all([fetch("/api/options/ram"), fetch("/api/options/storage")]);
+      const [ramResponse, storageResponse] = await Promise.all([
+        fetch("/api/options/ram", { cache: "no-store" }),
+        fetch("/api/options/storage", { cache: "no-store" })
+      ]);
       if (!ramResponse.ok || !storageResponse.ok) {
         throw new Error("Failed to load RAM/Storage options");
       }
@@ -713,6 +717,7 @@
     async function login(username, password) {
       const response = await fetch("/api/admin/auth/login", {
         method: "POST",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password })
       });
@@ -738,6 +743,7 @@
       };
 
       const response = await fetch(`/api/admin${path}`, {
+        cache: "no-store",
         ...options,
         headers
       });
@@ -934,12 +940,20 @@
         imageUrls
       };
 
-      await callAdmin(`/products/${id}`, {
+      const saved = await callAdmin(`/products/${id}`, {
         method: "PUT",
         body: JSON.stringify(payload)
       });
       closeEditModal();
-      setStatus(productStatus, "Product updated successfully.", "success");
+      if (saved.channelSync?.attempted && !saved.channelSync?.success) {
+        setStatus(
+          productStatus,
+          `Product saved, but Telegram channel sync failed: ${saved.channelSync.message || "unknown error"}`,
+          "error"
+        );
+      } else {
+        setStatus(productStatus, "Product updated successfully.", "success");
+      }
       await loadProducts();
     }
 
@@ -1054,6 +1068,22 @@
         statusPill.textContent = product.isActive ? "Active" : "Inactive";
         statusCell.appendChild(statusPill);
 
+        const channelCell = document.createElement("td");
+        const pub = product.channelPublication;
+        if (!pub) {
+          channelCell.textContent = "—";
+          channelCell.className = "muted";
+        } else if (pub.lastSyncError) {
+          channelCell.textContent = "Sync error";
+          channelCell.title = pub.lastSyncError;
+          channelCell.className = "muted";
+        } else {
+          channelCell.textContent = "Listed";
+          channelCell.title = pub.lastPublishedAt
+            ? `Last published ${new Date(pub.lastPublishedAt).toLocaleString()}`
+            : "Published on Telegram";
+        }
+
         const actionCell = document.createElement("td");
         const actionsWrap = document.createElement("div");
         actionsWrap.className = "action-buttons";
@@ -1090,17 +1120,53 @@
             return;
           }
 
-          await callAdmin(`/products/${product.id}/status`, {
+          const statusRes = await callAdmin(`/products/${product.id}/status`, {
             method: "PATCH",
             body: JSON.stringify({ isActive: nextStatus })
           });
 
-          setStatus(productStatus, `Product status updated for ${product.brand} ${product.model}.`, "success");
+          if (statusRes.channelSync?.attempted && !statusRes.channelSync?.success) {
+            setStatus(
+              productStatus,
+              `Status updated, but Telegram channel update failed: ${statusRes.channelSync.message || "unknown error"}`,
+              "error"
+            );
+          } else {
+            setStatus(productStatus, `Product status updated for ${product.brand} ${product.model}.`, "success");
+          }
           await loadProducts();
         });
 
         actionsWrap.appendChild(detailsBtn);
         actionsWrap.appendChild(editBtn);
+
+        if (product.isActive) {
+          const publishBtn = document.createElement("button");
+          publishBtn.type = "button";
+          publishBtn.className = "icon-btn";
+          publishBtn.title = "Publish or sync to Telegram channel";
+          publishBtn.setAttribute("aria-label", "Publish or sync to Telegram channel");
+          publishBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i>';
+          publishBtn.addEventListener("click", async () => {
+            try {
+              const result = await callAdmin(`/products/${product.id}/publish`, { method: "POST" });
+              if (result.channelPost?.attempted && !result.channelPost?.success) {
+                setStatus(
+                  productStatus,
+                  result.channelPost.message || "Telegram channel publish failed.",
+                  "error"
+                );
+              } else {
+                setStatus(productStatus, "Product published or synced to Telegram channel.", "success");
+              }
+              await loadProducts();
+            } catch (error) {
+              setStatus(productStatus, error.message, "error");
+            }
+          });
+          actionsWrap.appendChild(publishBtn);
+        }
+
         actionsWrap.appendChild(toggleBtn);
         actionCell.appendChild(actionsWrap);
 
@@ -1111,6 +1177,7 @@
         tr.appendChild(ramCell);
         tr.appendChild(storageCell);
         tr.appendChild(statusCell);
+        tr.appendChild(channelCell);
         tr.appendChild(actionCell);
         body.appendChild(tr);
       }
@@ -1321,12 +1388,11 @@
           body: JSON.stringify(payload)
         });
 
-        if (created?.channelPost?.attempted && !created?.channelPost?.success) {
-          const warning = created.channelPost.message || "Channel post failed.";
-          setStatus(productStatus, `Product created. Telegram channel post warning: ${warning}`, "error");
-        } else {
-          setStatus(productStatus, "Product created successfully.", "success");
-        }
+        setStatus(
+          productStatus,
+          "Product created successfully. Use Publish on the product row to post it to Telegram.",
+          "success"
+        );
         document.getElementById("productForm").reset();
         state.uploadedImageUrls = [];
         renderUploadedImages();

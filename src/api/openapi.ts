@@ -190,6 +190,29 @@ export const openApiDocument = {
           message: { type: "string" }
         }
       },
+      ChannelSyncResult: {
+        type: "object",
+        properties: {
+          attempted: { type: "boolean" },
+          success: { type: "boolean" },
+          message: { type: "string" }
+        }
+      },
+      ProductChannelPublicationSummary: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          lastPublishedAt: { type: "string", format: "date-time" },
+          lastSyncError: { type: "string", nullable: true }
+        }
+      },
+      ProductPublishResponse: {
+        type: "object",
+        properties: {
+          channelPost: { $ref: "#/components/schemas/ChannelPostResult" },
+          publication: { $ref: "#/components/schemas/ProductChannelPublicationSummary" }
+        }
+      },
       ProductListResponse: {
         type: "object",
         properties: {
@@ -382,29 +405,22 @@ export const openApiDocument = {
         },
         responses: {
           "201": {
-            description: "Product created",
+            description: "Product created (not posted to Telegram until Publish is used)",
             content: {
               "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    id: { type: "string" },
-                    brand: { type: "string" },
-                    model: { type: "string" },
-                    channelPost: { $ref: "#/components/schemas/ChannelPostResult" }
-                  }
-                }
+                schema: { type: "object", additionalProperties: true }
               }
             }
           },
-          "400": { description: "Validation error" }
+          "400": { description: "Validation error" },
+          "409": { description: "Active product with same brand and model already exists" }
         }
       }
     },
     "/api/admin/options/channel": {
       get: {
         tags: ["Admin"],
-        summary: "Get channel auto-post target",
+        summary: "Get Telegram channel target for manual publish/sync",
         security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
         responses: {
           "200": {
@@ -419,7 +435,7 @@ export const openApiDocument = {
       },
       put: {
         tags: ["Admin"],
-        summary: "Set channel auto-post target",
+        summary: "Set Telegram channel target for manual publish/sync",
         security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
         requestBody: {
           required: true,
@@ -457,8 +473,42 @@ export const openApiDocument = {
           }
         },
         responses: {
-          "200": { description: "Product updated" },
-          "400": { description: "Validation error" }
+          "200": {
+            description: "Product updated; may include channelSync if a channel listing exists",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    channelSync: { $ref: "#/components/schemas/ChannelSyncResult" }
+                  },
+                  additionalProperties: true
+                }
+              }
+            }
+          },
+          "400": { description: "Validation error" },
+          "409": { description: "Active product with same brand and model already exists" }
+        }
+      }
+    },
+    "/api/admin/products/{id}/publish": {
+      post: {
+        tags: ["Admin"],
+        summary: "Publish or sync an active product to the configured Telegram channel",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": {
+            description: "Publish or sync attempted",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ProductPublishResponse" }
+              }
+            }
+          },
+          "400": { description: "Inactive product or channel not configured" },
+          "404": { description: "Product not found" }
         }
       }
     },
@@ -477,8 +527,22 @@ export const openApiDocument = {
           }
         },
         responses: {
-          "200": { description: "Product status updated" },
-          "400": { description: "Validation error" }
+          "200": {
+            description: "Product status updated; may include channelSync when a channel listing is updated",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    channelSync: { $ref: "#/components/schemas/ChannelSyncResult" }
+                  },
+                  additionalProperties: true
+                }
+              }
+            }
+          },
+          "400": { description: "Validation error" },
+          "404": { description: "Product not found" }
         }
       }
     },
