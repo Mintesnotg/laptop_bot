@@ -1,12 +1,8 @@
-import fs from "node:fs";
-import path from "node:path";
 import type { ChannelPostKind, Product, ProductChannelPublication, ProductImage } from "@prisma/client";
-import { Input } from "telegraf";
 import { bot } from "../bot/index";
-import { usageLabelFromKey } from "../shared/constants";
-
-const MAX_CAPTION_LENGTH = 1024;
-const UPLOADS_ROOT = path.resolve(process.cwd(), "uploads");
+import { buildTelegramListingHtml, validateTelegramListingContent } from "./telegramMessageFormatter";
+import { mapTelegramFailureMessage, sendTelegramRichPost } from "./telegramMediaDelivery";
+import { getTelegramPostingConfig } from "./telegramPostingConfig";
 
 export type ChannelPostResult = {
   attempted: boolean;
@@ -23,6 +19,16 @@ export type ChannelPublicationPayload = {
 type ProductWithImages = Product & {
   images: ProductImage[];
 };
+
+type ChannelSendContext = {
+  requestId?: string;
+};
+
+function logPostingConfigWarning(field: "fullAddress" | "fallbackImageUrl", productId: string, context?: ChannelSendContext) {
+  console.warn(
+    `[telegram][config-warning] flow=channel-publish requestId=${context?.requestId ?? "-"} productId=${productId} field=${field}`
+  );
+}
 
 export function normalizeTelegramChannelTarget(rawTarget: string) {
   const trimmed = rawTarget.trim();
@@ -48,36 +54,6 @@ export function normalizeTelegramChannelTarget(rawTarget: string) {
   return `@${trimmed.replace(/^@+/, "")}`;
 }
 
-function trimToLimit(value: string, limit: number) {
-  if (value.length <= limit) {
-    return value;
-  }
-
-  return `${value.slice(0, Math.max(0, limit - 3))}...`;
-}
-
-export function buildProductChannelCaption(product: ProductWithImages) {
-  const usage = (product.usageTags || []).map((tag) => usageLabelFromKey(tag)).join(", ") || "-";
-  const lines = [
-    `${product.brand} ${product.model}`,
-    `Price: ${Number(product.price).toLocaleString()} ETB`,
-    `Specs: ${product.ramGb}GB RAM / ${product.storageGb}GB ${product.storageType}, ${product.cpu}${
-      product.gpu ? `, ${product.gpu}` : ""
-    }`,
-    `Usage: ${usage}`
-  ];
-
-  if (product.description) {
-    lines.push(`Description: ${product.description}`);
-  }
-
-  return trimToLimit(lines.join("\n"), MAX_CAPTION_LENGTH);
-}
-
-function buildSoldOutCaption(product: ProductWithImages) {
-  return trimToLimit(`SOLD OUT\n\n${buildProductChannelCaption(product)}`, MAX_CAPTION_LENGTH);
-}
-
 function sortedImageUrls(product: ProductWithImages) {
   return (product.images || [])
     .slice()
@@ -87,102 +63,56 @@ function sortedImageUrls(product: ProductWithImages) {
     .slice(0, 10);
 }
 
-function snapshotsEqual(a: string[], b: string[]) {
-  if (a.length !== b.length) {
-    return false;
-  }
-
-  return a.every((value, index) => value === b[index]);
-}
-
-function resolveUploadPath(imageUrl: string) {
-  const cleaned = imageUrl.replace(/^\/+/, "");
-  const absolutePath = path.resolve(process.cwd(), cleaned);
-
-  if (!absolutePath.startsWith(UPLOADS_ROOT)) {
-    return null;
-  }
-
-  if (!fs.existsSync(absolutePath)) {
-    return null;
-  }
-
-  return absolutePath;
-}
-
-function toTelegramPhotoInput(imageUrl: string): string | ReturnType<typeof Input.fromLocalFile> {
-  if (!imageUrl.startsWith("/uploads/")) {
-    return imageUrl;
-  }
-
-  const localPath = resolveUploadPath(imageUrl);
-  if (!localPath) {
-    return imageUrl;
-  }
-
-  return Input.fromLocalFile(localPath);
-}
-
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
-
-async function deleteChannelMessages(channelTarget: string, messageIds: string[]) {
+async function deleteChannelMessages(channelTarget: string, messageIds: string[], context?: ChannelSendContext) {
   const target = normalizeTelegramChannelTarget(channelTarget);
-  if (!target || messageIds.length === 0) {
-    return;
+  if (!target) {
+    return {
+      attempted: false,
+      success: false,
+      message: "Channel target is not configured."
+    } as ChannelPostResult;
   }
 
-  for (const rawId of messageIds) {
-    const messageId = Number(rawId);
-    if (!Number.isFinite(messageId)) {
-      continue;
-    }
+  const numericIds = messageIds
+    .map((rawId) => Number(rawId))
+    .filter((messageId) => Number.isFinite(messageId));
 
+  if (numericIds.length === 0) {
+    return {
+      attempted: false,
+      success: true,
+      message: "No stored channel messages to remove."
+    } as ChannelPostResult;
+  }
+
+  for (const messageId of numericIds) {
     try {
       await bot.telegram.deleteMessage(target, messageId);
-    } catch {
-      // Best-effort cleanup
+    } catch (error) {
+      console.error(
+        `[telegram][delete-failed] flow=channel-delete requestId=${context?.requestId ?? "-"} messageId=${messageId} message=${mapTelegramFailureMessage(
+          error,
+          "Failed to remove Telegram message."
+        )}`
+      );
+      return {
+        attempted: true,
+        success: false,
+        message: mapTelegramFailureMessage(error, "Failed to remove the existing Telegram listing.")
+      } as ChannelPostResult;
     }
   }
-}
 
-async function editListingTextOrCaption(
-  channelTarget: string,
-  publication: Pick<ProductChannelPublication, "postKind" | "messageIds">,
-  text: string
-): Promise<ChannelPostResult> {
-  const target = normalizeTelegramChannelTarget(channelTarget);
-  const firstId = publication.messageIds[0];
-  if (!target || !firstId) {
-    return { attempted: false, success: false, message: "No channel messages to update." };
-  }
-
-  const messageId = Number(firstId);
-  if (!Number.isFinite(messageId)) {
-    return { attempted: false, success: false, message: "Invalid stored message id." };
-  }
-
-  try {
-    if (publication.postKind === "TEXT") {
-      await bot.telegram.editMessageText(target, messageId, undefined, text);
-    } else {
-      await bot.telegram.editMessageCaption(target, messageId, undefined, text);
-    }
-
-    return { attempted: true, success: true };
-  } catch (error) {
-    return {
-      attempted: true,
-      success: false,
-      message: errorMessage(error, "Failed to edit Telegram channel message.")
-    };
-  }
+  return {
+    attempted: true,
+    success: true
+  } as ChannelPostResult;
 }
 
 export async function sendFreshProductChannelPost(
   channelTarget: string,
-  product: ProductWithImages
+  product: ProductWithImages,
+  context?: ChannelSendContext
 ): Promise<{ result: ChannelPostResult; payload: ChannelPublicationPayload | null }> {
   const target = normalizeTelegramChannelTarget(channelTarget);
   if (!target) {
@@ -196,148 +126,123 @@ export async function sendFreshProductChannelPost(
     };
   }
 
-  const caption = buildProductChannelCaption(product);
-  const imageUrls = sortedImageUrls(product);
-  const snapshot = [...imageUrls];
-
-  try {
-    if (imageUrls.length === 0) {
-      const message = await bot.telegram.sendMessage(target, caption);
-      return {
-        result: { attempted: true, success: true },
-        payload: {
-          messageIds: [String(message.message_id)],
-          postKind: "TEXT",
-          imageUrlsSnapshot: snapshot
-        }
-      };
-    }
-
-    if (imageUrls.length === 1) {
-      const message = await bot.telegram.sendPhoto(target, toTelegramPhotoInput(imageUrls[0]), { caption });
-      return {
-        result: { attempted: true, success: true },
-        payload: {
-          messageIds: [String(message.message_id)],
-          postKind: "PHOTO",
-          imageUrlsSnapshot: snapshot
-        }
-      };
-    }
-
-    const mediaGroup = imageUrls.map((imageUrl, index) => {
-      if (index === 0) {
-        return {
-          type: "photo" as const,
-          media: toTelegramPhotoInput(imageUrl),
-          caption
-        };
-      }
-
-      return {
-        type: "photo" as const,
-        media: toTelegramPhotoInput(imageUrl)
-      };
-    });
-
-    const messages = await bot.telegram.sendMediaGroup(target, mediaGroup as any);
-    const messageIds = messages.map((m) => String(m.message_id));
-    return {
-      result: { attempted: true, success: true },
-      payload: {
-        messageIds,
-        postKind: "ALBUM",
-        imageUrlsSnapshot: snapshot
-      }
-    };
-  } catch (error) {
+  const validationError = validateTelegramListingContent({
+    brand: product.brand,
+    model: product.model,
+    price: product.price,
+    ramGb: product.ramGb,
+    storageGb: product.storageGb,
+    storageType: product.storageType,
+    cpu: product.cpu,
+    gpu: product.gpu,
+    usageTags: product.usageTags,
+    description: product.description,
+    featureLines: product.featureLines
+  });
+  if (validationError) {
     return {
       result: {
-        attempted: true,
+        attempted: false,
         success: false,
-        message: errorMessage(error, "Failed to publish product to Telegram channel.")
+        message: validationError
       },
       payload: null
     };
   }
-}
 
-export async function syncPublishedProductOnChannel(
-  channelTarget: string,
-  product: ProductWithImages,
-  publication: ProductChannelPublication
-): Promise<{ result: ChannelPostResult; payload: ChannelPublicationPayload | null }> {
-  const target = normalizeTelegramChannelTarget(channelTarget);
-  if (!target) {
+  const postingConfig = await getTelegramPostingConfig();
+  if (!postingConfig.fullAddress.trim()) {
+    logPostingConfigWarning("fullAddress", product.id, context);
+  }
+  if (!postingConfig.fallbackImageUrl.trim()) {
+    logPostingConfigWarning("fallbackImageUrl", product.id, context);
+  }
+
+  const html = buildTelegramListingHtml(
+    {
+      brand: product.brand,
+      model: product.model,
+      price: product.price,
+      ramGb: product.ramGb,
+      storageGb: product.storageGb,
+      storageType: product.storageType,
+      cpu: product.cpu,
+      gpu: product.gpu,
+      usageTags: product.usageTags,
+      description: product.description,
+      featureLines: product.featureLines
+    },
+    postingConfig
+  );
+
+  const imageUrls = sortedImageUrls(product);
+  const sendResult = await sendTelegramRichPost({
+    telegram: bot.telegram,
+    chatId: target,
+    html,
+    imageUrls,
+    fallbackImageUrl: postingConfig.fallbackImageUrl,
+    context: {
+      flow: "channel-publish",
+      requestId: context?.requestId,
+      productId: product.id,
+      chatId: target
+    }
+  });
+
+  if (!sendResult.success) {
     return {
-      result: { attempted: false, success: false, message: "Channel target is not configured." },
+      result: {
+        attempted: sendResult.attempted,
+        success: false,
+        message: sendResult.message ?? "Failed to publish product to Telegram channel."
+      },
       payload: null
     };
   }
 
-  const nextSnapshot = sortedImageUrls(product);
-  const imagesUnchanged = snapshotsEqual(publication.imageUrlsSnapshot, nextSnapshot);
-
-  if (imagesUnchanged && publication.messageIds.length > 0) {
-    const caption = buildProductChannelCaption(product);
-    const editResult = await editListingTextOrCaption(target, publication, caption);
-    if (editResult.success) {
-      return {
-        result: editResult,
-        payload: {
-          messageIds: [...publication.messageIds],
-          postKind: publication.postKind,
-          imageUrlsSnapshot: nextSnapshot
-        }
-      };
-    }
-  }
-
-  await deleteChannelMessages(target, publication.messageIds);
-  return sendFreshProductChannelPost(channelTarget, product);
-}
-
-export async function markPublishedProductSoldOutOnChannel(
-  channelTarget: string,
-  product: ProductWithImages,
-  publication: ProductChannelPublication
-): Promise<{ result: ChannelPostResult; removedPublication: boolean }> {
-  const target = normalizeTelegramChannelTarget(channelTarget);
-  if (!target || publication.messageIds.length === 0) {
-    return { result: { attempted: false, success: true }, removedPublication: false };
-  }
-
-  const caption = buildSoldOutCaption(product);
-  const editResult = await editListingTextOrCaption(target, publication, caption);
-
-  if (editResult.success) {
-    return { result: editResult, removedPublication: false };
-  }
-
-  await deleteChannelMessages(target, publication.messageIds);
   return {
-    result: {
-      attempted: true,
-      success: true,
-      message: "Listing removed from channel (edit failed; messages deleted)."
-    },
-    removedPublication: true
+    result: { attempted: true, success: true },
+    payload: {
+      messageIds: sendResult.messageIds,
+      postKind: sendResult.postKind,
+      imageUrlsSnapshot: sendResult.validUrls
+    }
   };
 }
 
-export async function restorePublishedProductCaptionOnChannel(
+export async function replacePublishedProductOnChannel(
   channelTarget: string,
   product: ProductWithImages,
-  publication: ProductChannelPublication
-): Promise<ChannelPostResult> {
-  const caption = buildProductChannelCaption(product);
-  return editListingTextOrCaption(channelTarget, publication, caption);
+  publication: Pick<ProductChannelPublication, "messageIds">,
+  context?: ChannelSendContext
+): Promise<{ result: ChannelPostResult; payload: ChannelPublicationPayload | null }> {
+  const deleteResult = await deleteChannelMessages(channelTarget, publication.messageIds, context);
+  if (!deleteResult.success) {
+    return {
+      result: deleteResult,
+      payload: null
+    };
+  }
+
+  return sendFreshProductChannelPost(channelTarget, product, context);
 }
 
-export async function postProductToTelegramChannel(
+export async function removePublishedProductFromChannel(
   channelTarget: string,
-  product: ProductWithImages
-): Promise<ChannelPostResult> {
-  const { result } = await sendFreshProductChannelPost(channelTarget, product);
-  return result;
+  publication: Pick<ProductChannelPublication, "messageIds">,
+  context?: ChannelSendContext
+): Promise<{ result: ChannelPostResult }> {
+  const deleteResult = await deleteChannelMessages(channelTarget, publication.messageIds, context);
+  if (!deleteResult.success) {
+    return { result: deleteResult };
+  }
+
+  return {
+    result: {
+      attempted: deleteResult.attempted,
+      success: true,
+      message: "Listing removed from Telegram channel."
+    }
+  };
 }

@@ -1,4 +1,4 @@
-import { Prisma, StorageType, UsageTag } from "@prisma/client";
+import { Prisma, Product, ProductChannelPublication, ProductImage, StorageType, UsageTag } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { type Request, Router } from "express";
 import jwt from "jsonwebtoken";
@@ -11,16 +11,18 @@ import { env } from "../../env";
 import { prisma } from "../../prisma";
 import {
   type ChannelPublicationPayload,
-  markPublishedProductSoldOutOnChannel,
   normalizeTelegramChannelTarget,
-  restorePublishedProductCaptionOnChannel,
+  removePublishedProductFromChannel,
+  replacePublishedProductOnChannel,
   sendFreshProductChannelPost,
-  syncPublishedProductOnChannel
 } from "../../services/telegramChannelPublisher";
-import { productCreateSchema } from "../../shared/contracts";
+import {
+  getTelegramPostingConfig,
+  normalizeTelegramPostingConfig,
+  upsertTelegramPostingConfig
+} from "../../services/telegramPostingConfig";
+import { productCreateSchema, productUpdateSchema } from "../../shared/contracts";
 import { requireAdminAuth } from "../middleware/requireAdminAuth";
-
-const productUpdateSchema = productCreateSchema.partial();
 
 const loginSchema = z.object({
   username: z.string().trim().min(1),
@@ -68,11 +70,183 @@ const storageOptionUpdateSchema = storageOptionCreateSchema.partial();
 const channelOptionUpdateSchema = z.object({
   channelTarget: z.string().trim().max(255)
 });
+const telegramPostingOptionUpdateSchema = z.object({
+  sellerPhones: z.array(z.string().trim()).default([]),
+  telegramUsername: z.string().trim().default(""),
+  telegramProfileUrl: z.string().trim().default(""),
+  fullAddress: z.string().trim().default(""),
+  ctaText: z.string().trim().default(""),
+  fallbackImageUrl: z.string().trim().default("")
+});
 
 const TELEGRAM_CHANNEL_SETTING_KEY = "telegramChannelTarget";
+const CHANNEL_PUBLICATION_TABLE_MISSING_MESSAGE =
+  "Telegram publication tracking is not initialized. Run Prisma migrations to create ProductChannelPublication and retry.";
 
 const DUPLICATE_ACTIVE_PRODUCT_MESSAGE = (brand: string, model: string) =>
   `Product "${brand} ${model}" already exists. Please edit the existing product instead.`;
+
+type ProductWithImagesAndChannelPublication = Product & {
+  images: ProductImage[];
+  channelPublication: ProductChannelPublication | null;
+};
+
+type ProductCompatibilityRow = Omit<Product, "featureLines"> & {
+  images: ProductImage[];
+  featureLines?: string[] | null;
+  channelPublication?: ProductChannelPublication | null;
+};
+
+function isMissingProductChannelPublicationTableError(error: unknown) {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2021") {
+    return false;
+  }
+
+  const tableName = typeof error.meta?.table === "string" ? error.meta.table : "";
+  return tableName.includes("ProductChannelPublication");
+}
+
+function isMissingProductFeatureLinesColumnError(error: unknown) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2022") {
+    const column = typeof error.meta?.column === "string" ? error.meta.column : "";
+    if (column.toLowerCase().includes("featurelines")) {
+      return true;
+    }
+  }
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" && error && "message" in error && typeof (error as { message?: string }).message === "string"
+        ? (error as { message: string }).message
+        : "";
+  return message.toLowerCase().includes("product.featurelines");
+}
+
+function withFeatureLinesFallback<T extends ProductCompatibilityRow>(product: T) {
+  return {
+    ...product,
+    featureLines: Array.isArray(product.featureLines) ? product.featureLines : []
+  };
+}
+
+function productListSelectWithoutFeatureLines(withChannelPublication: boolean) {
+  const base = {
+    id: true,
+    brand: true,
+    model: true,
+    price: true,
+    ramGb: true,
+    storageGb: true,
+    storageType: true,
+    cpu: true,
+    gpu: true,
+    usageTags: true,
+    description: true,
+    isActive: true,
+    createdAt: true,
+    updatedAt: true,
+    images: { select: { id: true, imageUrl: true, sortOrder: true }, orderBy: { sortOrder: "asc" as const } }
+  };
+
+  if (!withChannelPublication) {
+    return base;
+  }
+
+  return {
+    ...base,
+    channelPublication: { select: { id: true, lastPublishedAt: true, lastSyncError: true } }
+  };
+}
+
+function productSelectForSingle(withFeatureLines: boolean, withChannelPublication: boolean) {
+  const base = {
+    id: true,
+    brand: true,
+    model: true,
+    price: true,
+    ramGb: true,
+    storageGb: true,
+    storageType: true,
+    cpu: true,
+    gpu: true,
+    usageTags: true,
+    description: true,
+    isActive: true,
+    createdAt: true,
+    updatedAt: true,
+    images: { orderBy: { sortOrder: "asc" as const } }
+  };
+
+  const withFeatures = withFeatureLines ? { ...base, featureLines: true } : base;
+  return withChannelPublication ? { ...withFeatures, channelPublication: true } : withFeatures;
+}
+
+async function isProductChannelPublicationTableAvailable() {
+  try {
+    await prisma.productChannelPublication.count();
+    return true;
+  } catch (error) {
+    if (isMissingProductChannelPublicationTableError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function findProductWithImagesAndPublication(
+  productId: string
+): Promise<ProductWithImagesAndChannelPublication | null> {
+  try {
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: productSelectForSingle(true, true)
+    });
+    return product
+      ? (withFeatureLinesFallback(product as ProductCompatibilityRow) as ProductWithImagesAndChannelPublication)
+      : null;
+  } catch (initialError) {
+    if (!isMissingProductChannelPublicationTableError(initialError) && !isMissingProductFeatureLinesColumnError(initialError)) {
+      throw initialError;
+    }
+
+    const fallbackPlan: Array<{ withFeatureLines: boolean; withChannelPublication: boolean }> = [];
+    if (isMissingProductFeatureLinesColumnError(initialError)) {
+      fallbackPlan.push({ withFeatureLines: false, withChannelPublication: true });
+    }
+    if (isMissingProductChannelPublicationTableError(initialError)) {
+      fallbackPlan.push({ withFeatureLines: true, withChannelPublication: false });
+    }
+    fallbackPlan.push({ withFeatureLines: false, withChannelPublication: false });
+
+    for (const candidate of fallbackPlan) {
+      try {
+        const product = await prisma.product.findUnique({
+          where: { id: productId },
+          select: productSelectForSingle(candidate.withFeatureLines, candidate.withChannelPublication)
+        });
+        if (!product) {
+          return null;
+        }
+
+        const normalized = withFeatureLinesFallback(product as ProductCompatibilityRow);
+        return {
+          ...normalized,
+          channelPublication: candidate.withChannelPublication
+            ? ((normalized.channelPublication ?? null) as ProductChannelPublication | null)
+            : null
+        } as ProductWithImagesAndChannelPublication;
+      } catch (error) {
+        if (isMissingProductFeatureLinesColumnError(error) || isMissingProductChannelPublicationTableError(error)) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return null;
+  }
+}
 
 async function upsertChannelPublicationRecord(
   productId: string,
@@ -102,6 +276,16 @@ async function upsertChannelPublicationRecord(
       lastPublishedAt: now,
       lastSyncedAt: now,
       lastSyncError
+    }
+  });
+}
+
+async function setChannelPublicationSyncError(productId: string, message: string) {
+  await prisma.productChannelPublication.updateMany({
+    where: { productId },
+    data: {
+      lastSyncedAt: new Date(),
+      lastSyncError: message
     }
   });
 }
@@ -252,6 +436,22 @@ adminRouter.put("/options/channel", async (req, res) => {
   return res.json({ channelTarget: setting.value });
 });
 
+adminRouter.get("/options/telegram-posting", async (_req, res) => {
+  const config = await getTelegramPostingConfig();
+  return res.json(config);
+});
+
+adminRouter.put("/options/telegram-posting", async (req, res) => {
+  const parsed = telegramPostingOptionUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
+  }
+
+  const normalized = normalizeTelegramPostingConfig(parsed.data);
+  const saved = await upsertTelegramPostingConfig(normalized);
+  return res.json(saved);
+});
+
 adminRouter.get("/products", async (req, res) => {
   const parsed = listProductsQuerySchema.safeParse(req.query);
   if (!parsed.success) {
@@ -270,29 +470,58 @@ adminRouter.get("/products", async (req, res) => {
       }
     : {};
 
-  const [total, items] = await prisma.$transaction([
-    prisma.product.count({ where }),
-    prisma.product.findMany({
-      where,
-      include: {
-        images: {
-          select: { id: true, imageUrl: true, sortOrder: true },
-          orderBy: { sortOrder: "asc" }
-        },
-        channelPublication: {
-          select: { id: true, lastPublishedAt: true, lastSyncError: true }
-        }
-      },
-      orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
-      skip,
-      take: pageSize
-    })
-  ]);
+  let total = 0;
+  let items: any[] = [];
+
+  try {
+    [total, items] = await prisma.$transaction([
+      prisma.product.count({ where }),
+      prisma.product.findMany({
+        where,
+        select: productListSelectWithoutFeatureLines(true),
+        orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
+        skip,
+        take: pageSize
+      })
+    ]);
+  } catch (error) {
+    const missingPublication = isMissingProductChannelPublicationTableError(error);
+    const missingFeatureLines = isMissingProductFeatureLinesColumnError(error);
+
+    if (!missingPublication && !missingFeatureLines) {
+      throw error;
+    }
+
+    const fallbackWithPublication = !missingPublication;
+
+    const [fallbackTotal, fallbackItems] = await prisma.$transaction([
+      prisma.product.count({ where }),
+      prisma.product.findMany({
+        where,
+        select: productListSelectWithoutFeatureLines(fallbackWithPublication),
+        orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
+        skip,
+        take: pageSize
+      })
+    ]);
+
+    total = fallbackTotal;
+    items = fallbackItems.map((item) => ({
+      ...withFeatureLinesFallback(item as ProductCompatibilityRow),
+      channelPublication: fallbackWithPublication
+        ? (((item as ProductCompatibilityRow).channelPublication ?? null) as ProductChannelPublication | null)
+        : null
+    }));
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const normalizedItems = items.map((item) => ({
+    ...withFeatureLinesFallback(item as ProductCompatibilityRow),
+    channelPublication: ((item as ProductCompatibilityRow).channelPublication ?? null) as ProductChannelPublication | null
+  }));
 
   return res.json({
-    items,
+    items: normalizedItems,
     pagination: {
       page,
       pageSize,
@@ -325,32 +554,77 @@ adminRouter.post("/products", async (req, res) => {
   }
 
   try {
-    const product = await prisma.product.create({
-      data: {
-        brand: parsed.data.brand,
-        model: parsed.data.model,
-        price: parsed.data.price,
-        ramGb: parsed.data.ramGb,
-        storageGb: parsed.data.storageGb,
-        storageType: parsed.data.storageType as StorageType,
-        cpu: parsed.data.cpu,
-        gpu: parsed.data.gpu,
-        usageTags: parsed.data.usageTags as UsageTag[],
-        description: parsed.data.description,
-        isActive: true,
-        images: {
-          create: parsed.data.imageUrls.map((url, index) => ({ imageUrl: url, sortOrder: index }))
-        }
-      },
-      include: {
-        images: true,
-        channelPublication: {
-          select: { id: true, lastPublishedAt: true, lastSyncError: true }
-        }
+    const hasPublicationTable = await isProductChannelPublicationTableAvailable();
+    const createDataWithoutFeatureLines = {
+      brand: parsed.data.brand,
+      model: parsed.data.model,
+      price: parsed.data.price,
+      ramGb: parsed.data.ramGb,
+      storageGb: parsed.data.storageGb,
+      storageType: parsed.data.storageType as StorageType,
+      cpu: parsed.data.cpu,
+      gpu: parsed.data.gpu,
+      usageTags: parsed.data.usageTags as UsageTag[],
+      description: parsed.data.description,
+      isActive: true,
+      images: {
+        create: parsed.data.imageUrls.map((url, index) => ({ imageUrl: url, sortOrder: index }))
       }
-    });
+    };
+    const createDataWithFeatureLines = {
+      ...createDataWithoutFeatureLines,
+      featureLines: parsed.data.featureLines
+    };
 
-    return res.status(201).json(product);
+    if (!hasPublicationTable) {
+      try {
+        const product = await prisma.product.create({
+          data: createDataWithFeatureLines,
+          include: { images: true }
+        });
+        return res.status(201).json({ ...product, channelPublication: null });
+      } catch (error) {
+        if (!isMissingProductFeatureLinesColumnError(error)) {
+          throw error;
+        }
+
+        const fallbackProduct = await prisma.product.create({
+          data: createDataWithoutFeatureLines,
+          include: { images: true }
+        });
+        return res.status(201).json({ ...fallbackProduct, channelPublication: null, featureLines: [] });
+      }
+    }
+
+    try {
+      const product = await prisma.product.create({
+        data: createDataWithFeatureLines,
+        include: {
+          images: true,
+          channelPublication: {
+            select: { id: true, lastPublishedAt: true, lastSyncError: true }
+          }
+        }
+      });
+
+      return res.status(201).json(product);
+    } catch (error) {
+      if (!isMissingProductFeatureLinesColumnError(error)) {
+        throw error;
+      }
+
+      const fallbackProduct = await prisma.product.create({
+        data: createDataWithoutFeatureLines,
+        include: {
+          images: true,
+          channelPublication: {
+            select: { id: true, lastPublishedAt: true, lastSyncError: true }
+          }
+        }
+      });
+
+      return res.status(201).json({ ...fallbackProduct, featureLines: [] });
+    }
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return res.status(409).json({
@@ -371,13 +645,12 @@ adminRouter.post("/products/:id/publish", async (req, res) => {
     });
   }
 
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
-    include: {
-      images: { orderBy: { sortOrder: "asc" } },
-      channelPublication: true
-    }
-  });
+  const hasPublicationTable = await isProductChannelPublicationTableAvailable();
+  if (!hasPublicationTable) {
+    return res.status(503).json({ message: CHANNEL_PUBLICATION_TABLE_MISSING_MESSAGE });
+  }
+
+  const product = await findProductWithImagesAndPublication(productId);
 
   if (!product) {
     return res.status(404).json({ message: "Product not found" });
@@ -391,21 +664,19 @@ adminRouter.post("/products/:id/publish", async (req, res) => {
   let payload: ChannelPublicationPayload | null = null;
 
   if (product.channelPublication) {
-    ({ result, payload } = await syncPublishedProductOnChannel(channelTarget, product, product.channelPublication));
+    ({ result, payload } = await replacePublishedProductOnChannel(
+      channelTarget,
+      product,
+      product.channelPublication
+    ));
   } else {
     ({ result, payload } = await sendFreshProductChannelPost(channelTarget, product));
   }
 
   if (payload && result.success) {
     await upsertChannelPublicationRecord(productId, channelTarget, payload, null);
-  } else if (result.attempted && !result.success && product.channelPublication) {
-    await prisma.productChannelPublication.update({
-      where: { productId },
-      data: {
-        lastSyncedAt: new Date(),
-        lastSyncError: result.message ?? "Publish failed"
-      }
-    });
+  } else if (!result.success && product.channelPublication) {
+    await setChannelPublicationSyncError(productId, result.message ?? "Publish replace failed");
   }
 
   const publication = await prisma.productChannelPublication.findUnique({
@@ -428,22 +699,29 @@ adminRouter.put("/products/:id", async (req, res) => {
   const productId = req.params.id;
 
   let updated;
-  try {
-    updated = await prisma.$transaction(async (tx) => {
+  const baseUpdateData = {
+    brand: parsed.data.brand,
+    model: parsed.data.model,
+    price: parsed.data.price,
+    ramGb: parsed.data.ramGb,
+    storageGb: parsed.data.storageGb,
+    storageType: parsed.data.storageType as StorageType | undefined,
+    cpu: parsed.data.cpu,
+    gpu: parsed.data.gpu,
+    usageTags: parsed.data.usageTags as UsageTag[] | undefined,
+    description: parsed.data.description
+  };
+
+  const runProductUpdate = async (includeFeatureLines: boolean) =>
+    prisma.$transaction(async (tx) => {
       const product = await tx.product.update({
         where: { id: productId },
-        data: {
-          brand: parsed.data.brand,
-          model: parsed.data.model,
-          price: parsed.data.price,
-          ramGb: parsed.data.ramGb,
-          storageGb: parsed.data.storageGb,
-          storageType: parsed.data.storageType as StorageType | undefined,
-          cpu: parsed.data.cpu,
-          gpu: parsed.data.gpu,
-          usageTags: parsed.data.usageTags as UsageTag[] | undefined,
-          description: parsed.data.description
-        }
+        data: includeFeatureLines
+          ? {
+              ...baseUpdateData,
+              featureLines: parsed.data.featureLines
+            }
+          : baseUpdateData
       });
 
       if (parsed.data.imageUrls) {
@@ -457,6 +735,49 @@ adminRouter.put("/products/:id", async (req, res) => {
 
       return product;
     });
+
+  try {
+    updated = await runProductUpdate(true);
+  } catch (error) {
+    if (isMissingProductFeatureLinesColumnError(error)) {
+      updated = await runProductUpdate(false);
+    } else if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const current = await prisma.product.findUnique({
+        where: { id: productId },
+        select: { brand: true, model: true }
+      });
+      return res.status(409).json({
+        message: DUPLICATE_ACTIVE_PRODUCT_MESSAGE(
+          parsed.data.brand ?? current?.brand ?? "",
+          parsed.data.model ?? current?.model ?? ""
+        )
+      });
+    } else {
+      throw error;
+    }
+  }
+
+  if (!updated) {
+    return res.status(500).json({ message: "Failed to update product." });
+  }
+
+  try {
+    const full = await findProductWithImagesAndPublication(productId);
+
+    let channelSync: { attempted: boolean; success: boolean; message?: string } | undefined;
+
+    if (full?.channelPublication) {
+      const target = await getTelegramChannelTarget();
+      const { result, payload } = await replacePublishedProductOnChannel(target, full, full.channelPublication);
+      channelSync = result;
+      if (payload && result.success) {
+        await upsertChannelPublicationRecord(productId, target, payload, null);
+      } else if (!result.success) {
+        await setChannelPublicationSyncError(productId, result.message ?? "Channel listing replace failed");
+      }
+    }
+
+    return res.json({ ...updated, channelSync });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const current = await prisma.product.findUnique({
@@ -473,62 +794,6 @@ adminRouter.put("/products/:id", async (req, res) => {
 
     throw error;
   }
-
-  const full = await prisma.product.findUnique({
-    where: { id: productId },
-    include: {
-      images: { orderBy: { sortOrder: "asc" } },
-      channelPublication: true
-    }
-  });
-
-  let channelSync: { attempted: boolean; success: boolean; message?: string } | undefined;
-
-  if (full?.channelPublication) {
-    const target = await getTelegramChannelTarget();
-    if (target) {
-      if (full.isActive) {
-        const { result, payload } = await syncPublishedProductOnChannel(target, full, full.channelPublication);
-        channelSync = result;
-        if (payload && result.success) {
-          await upsertChannelPublicationRecord(productId, target, payload, null);
-        } else if (result.attempted && !result.success) {
-          await prisma.productChannelPublication.update({
-            where: { productId },
-            data: {
-              lastSyncedAt: new Date(),
-              lastSyncError: result.message ?? "Sync failed"
-            }
-          });
-        }
-      } else {
-        const { result, removedPublication } = await markPublishedProductSoldOutOnChannel(
-          target,
-          full,
-          full.channelPublication
-        );
-        channelSync = result;
-        if (removedPublication) {
-          await prisma.productChannelPublication.delete({ where: { productId } });
-        } else if (result.success) {
-          await prisma.productChannelPublication.update({
-            where: { productId },
-            data: { lastSyncedAt: new Date(), lastSyncError: null }
-          });
-        } else {
-          await prisma.productChannelPublication.update({
-            where: { productId },
-            data: {
-              lastSyncedAt: new Date(),
-              lastSyncError: result.message ?? "Sold-out update failed"
-            }
-          });
-        }
-      }
-    }
-  }
-
-  return res.json({ ...updated, channelSync });
 });
 
 adminRouter.patch("/products/:id/status", async (req, res) => {
@@ -539,88 +804,46 @@ adminRouter.patch("/products/:id/status", async (req, res) => {
 
   const productId = req.params.id;
 
-  const before = await prisma.product.findUnique({
-    where: { id: productId },
-    include: {
-      images: { orderBy: { sortOrder: "asc" } },
-      channelPublication: true
-    }
-  });
+  const before = await findProductWithImagesAndPublication(productId);
 
   if (!before) {
     return res.status(404).json({ message: "Product not found" });
   }
 
-  const updated = await prisma.product.update({
-    where: { id: productId },
-    data: { isActive: parsed.data.isActive },
-    select: {
-      id: true,
-      brand: true,
-      model: true,
-      isActive: true,
-      updatedAt: true
+  let updated;
+  try {
+    updated = await prisma.product.update({
+      where: { id: productId },
+      data: { isActive: parsed.data.isActive },
+      select: {
+        id: true,
+        brand: true,
+        model: true,
+        isActive: true,
+        updatedAt: true
+      }
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return res.status(409).json({
+        message: DUPLICATE_ACTIVE_PRODUCT_MESSAGE(before.brand, before.model)
+      });
     }
-  });
+
+    throw error;
+  }
 
   let channelSync: { attempted: boolean; success: boolean; message?: string } | undefined;
-  const target = await getTelegramChannelTarget();
 
-  if (before.channelPublication && target) {
-    if (!parsed.data.isActive) {
-      const { result, removedPublication } = await markPublishedProductSoldOutOnChannel(
-        target,
-        before,
-        before.channelPublication
-      );
-      channelSync = result;
-      if (removedPublication) {
-        await prisma.productChannelPublication.delete({ where: { productId } });
-      } else if (result.success) {
-        await prisma.productChannelPublication.update({
-          where: { productId },
-          data: { lastSyncedAt: new Date(), lastSyncError: null }
-        });
-      } else {
-        await prisma.productChannelPublication.update({
-          where: { productId },
-          data: {
-            lastSyncedAt: new Date(),
-            lastSyncError: result.message ?? "Sold-out update failed"
-          }
-        });
-      }
+  if (!parsed.data.isActive && before.channelPublication) {
+    const target = await getTelegramChannelTarget();
+    const { result } = await removePublishedProductFromChannel(target, before.channelPublication);
+    channelSync = result;
+
+    if (result.success) {
+      await prisma.productChannelPublication.deleteMany({ where: { productId } });
     } else {
-      const after = await prisma.product.findUnique({
-        where: { id: productId },
-        include: {
-          images: { orderBy: { sortOrder: "asc" } },
-          channelPublication: true
-        }
-      });
-
-      if (after?.channelPublication) {
-        const result = await restorePublishedProductCaptionOnChannel(
-          target,
-          after,
-          after.channelPublication
-        );
-        channelSync = result;
-        if (result.success) {
-          await prisma.productChannelPublication.update({
-            where: { productId },
-            data: { lastSyncedAt: new Date(), lastSyncError: null }
-          });
-        } else if (result.attempted) {
-          await prisma.productChannelPublication.update({
-            where: { productId },
-            data: {
-              lastSyncedAt: new Date(),
-              lastSyncError: result.message ?? "Restore caption failed"
-            }
-          });
-        }
-      }
+      await setChannelPublicationSyncError(productId, result.message ?? "Channel listing removal failed");
     }
   }
 

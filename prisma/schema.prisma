@@ -78,6 +78,7 @@ model Product {
   cpu                   String
   gpu                   String?
   usageTags             UsageTag[]
+  featureLines          String[]               @default([])
   description           String?
   isActive              Boolean                @default(true)
   createdAt             DateTime               @default(now())

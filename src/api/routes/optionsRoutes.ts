@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../../prisma";
+import { getTelegramPostingConfig } from "../../services/telegramPostingConfig";
 import { BUDGET_RANGES, RAM_OPTIONS, STORAGE_OPTIONS, USAGE_OPTIONS } from "../../shared/constants";
 
 export const optionsRouter = Router();
@@ -55,5 +56,10 @@ optionsRouter.get("/usage-tags", (_req, res) => {
   return res.json({
     items: USAGE_OPTIONS.map((entry) => ({ key: entry.key, label: entry.label }))
   });
+});
+
+optionsRouter.get("/telegram-posting", async (_req, res) => {
+  const config = await getTelegramPostingConfig();
+  return res.json(config);
 });
 

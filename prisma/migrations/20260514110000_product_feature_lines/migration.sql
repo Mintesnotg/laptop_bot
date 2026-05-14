@@ -1,0 +1,1 @@
+ALTER TABLE "Product" ADD COLUMN "featureLines" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

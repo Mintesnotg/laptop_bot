@@ -39,6 +39,22 @@
     <p class="status" id="status"></p>
   </div>
 
+  <div class="card">
+    <h2>Telegram Posting Settings</h2>
+    <p class="muted">Controls CTA/contact formatting for both channel posts and recommendation messages.</p>
+    <label for="postingPhones">Seller Phones (one per line)</label>
+    <textarea id="postingPhones" rows="3" style="width:100%; padding:8px; border:1px solid #d7deea; border-radius:8px;"></textarea>
+    <div class="inline" style="margin-top:8px;">
+      <input id="postingUsername" placeholder="@telegram_username" />
+      <input id="postingProfileUrl" placeholder="https://t.me/telegram_username" />
+    </div>
+    <input id="postingCtaText" placeholder="CTA text (example: Contact now to reserve this laptop today.)" style="margin-top:8px;" />
+    <input id="postingFallbackImageUrl" placeholder="Fallback image URL (/uploads/... or https://...)" style="margin-top:8px;" />
+    <label for="postingAddress" style="margin-top:8px;">Full Address</label>
+    <textarea id="postingAddress" rows="3" style="width:100%; padding:8px; border:1px solid #d7deea; border-radius:8px;"></textarea>
+    <button id="savePostingConfigBtn" class="secondary" style="margin-top:8px;">Save Posting Settings</button>
+  </div>
+
   <div class="grid">
     <section class="card">
       <h2>Budget</h2>
@@ -124,14 +140,21 @@
     }
 
     async function loadAll() {
-      const [channel, budgets, ram, storage] = await Promise.all([
+      const [channel, posting, budgets, ram, storage] = await Promise.all([
         callAdmin("/options/channel"),
+        callAdmin("/options/telegram-posting"),
         callAdmin("/options/budgets"),
         callAdmin("/options/ram"),
         callAdmin("/options/storage")
       ]);
 
       document.getElementById("channelTargetInput").value = channel.channelTarget || "";
+      document.getElementById("postingPhones").value = (posting.sellerPhones || []).join("\n");
+      document.getElementById("postingUsername").value = posting.telegramUsername || "";
+      document.getElementById("postingProfileUrl").value = posting.telegramProfileUrl || "";
+      document.getElementById("postingCtaText").value = posting.ctaText || "";
+      document.getElementById("postingFallbackImageUrl").value = posting.fallbackImageUrl || "";
+      document.getElementById("postingAddress").value = posting.fullAddress || "";
       renderBudgetRows(budgets.items || []);
       renderRamRows(ram.items || []);
       renderStorageRows(storage.items || []);
@@ -226,6 +249,32 @@
           })
         });
         setStatus("Channel target saved", "success");
+      } catch (e) {
+        setStatus(e.message, "error");
+      }
+    });
+
+    document.getElementById("savePostingConfigBtn").addEventListener("click", async () => {
+      try {
+        const sellerPhones = document
+          .getElementById("postingPhones")
+          .value
+          .split(/\n/)
+          .map((x) => x.trim())
+          .filter(Boolean);
+
+        await callAdmin("/options/telegram-posting", {
+          method: "PUT",
+          body: JSON.stringify({
+            sellerPhones,
+            telegramUsername: document.getElementById("postingUsername").value.trim(),
+            telegramProfileUrl: document.getElementById("postingProfileUrl").value.trim(),
+            ctaText: document.getElementById("postingCtaText").value.trim(),
+            fallbackImageUrl: document.getElementById("postingFallbackImageUrl").value.trim(),
+            fullAddress: document.getElementById("postingAddress").value.trim()
+          })
+        });
+        setStatus("Telegram posting settings saved", "success");
       } catch (e) {
         setStatus(e.message, "error");
       }

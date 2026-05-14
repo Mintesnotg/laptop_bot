@@ -15,14 +15,14 @@ export const BUDGET_RANGES: BudgetRange[] = [
 ];
 
 export const USAGE_OPTIONS = [
-  { key: "STUDENT", label: "Study for Student" },
-  { key: "OFFICE", label: "Office work and business" },
-  { key: "GAMING", label: "Gaming and Entertainment" },
-  { key: "CODING", label: "Coding for Developers" },
-  { key: "GRAPHICS_DESIGN", label: "Graphics Design for Designers" },
-  { key: "UX_UI", label: "UX/UI for Designers" },
-  { key: "TRAVEL", label: "Travel and Tourism" },
-  { key: "DAILY_BROWSING", label: "Daily Browsing and Searching" }
+  { key: "STUDENT", label: "Student Use" },
+  { key: "OFFICE", label: "Office Work" },
+  { key: "GAMING", label: "Gaming" },
+  { key: "CODING", label: "Programming" },
+  { key: "GRAPHICS_DESIGN", label: "Video Editing / Graphics" },
+  { key: "DESIGN", label: "Design" },
+  { key: "UX_UI", label: "Design UI/UX" },
+  { key: "DAILY_BROWSING", label: "Daily Browsing" }
 ] as const;
 
 export const USAGE_KEYS = USAGE_OPTIONS.map((entry) => entry.key) as [
@@ -33,25 +33,48 @@ export const USAGE_KEYS = USAGE_OPTIONS.map((entry) => entry.key) as [
 export type UsageKey = (typeof USAGE_OPTIONS)[number]["key"];
 
 const usageAliasMap: Record<string, UsageKey> = {
-  "UX/UI": "UX_UI"
+  "UX/UI": "UX_UI",
+  UXUI: "UX_UI",
+  UI_UX: "UX_UI",
+  UIUX: "UX_UI",
+  UI_UX_DESIGN: "UX_UI",
+  VIDEO_EDITING: "GRAPHICS_DESIGN",
+  VIDEO_EDIT: "GRAPHICS_DESIGN",
+  VIDEOEDITING: "GRAPHICS_DESIGN",
+  VIDEO_EDITOR: "GRAPHICS_DESIGN",
+  VIDEO: "GRAPHICS_DESIGN",
+  PROGRAMMING: "CODING",
+  DEVELOPER: "CODING",
+  DEVELOPERS: "CODING",
+  SOFTWARE_DEVELOPMENT: "CODING",
+  OFFICE_WORK: "OFFICE",
+  OFFICEWORK: "OFFICE",
+  STUDENT_USE: "STUDENT",
+  DESIGN_UI_UX: "UX_UI"
 };
 
 export function normalizeUsageKey(raw: string): UsageKey | null {
   const trimmed = raw.trim();
-  if ((USAGE_KEYS as readonly string[]).includes(trimmed)) {
-    return trimmed as UsageKey;
+  const normalized = trimmed.toUpperCase().replace(/[^\w]+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
+
+  if ((USAGE_KEYS as readonly string[]).includes(normalized)) {
+    return normalized as UsageKey;
   }
 
-  return usageAliasMap[trimmed] ?? null;
+  return usageAliasMap[normalized] ?? usageAliasMap[trimmed.toUpperCase()] ?? null;
 }
 
 export const CLIENT_USAGE_VALUES = [
   "STUDENT",
+  "STUDENT_USE",
   "OFFICE",
+  "OFFICE_WORK",
   "DESIGN",
   "GAMING",
   "CODING",
+  "PROGRAMMING",
   "GRAPHICS_DESIGN",
+  "VIDEO_EDITING",
   "ARCHITECTURE",
   "FINANCE",
   "MARKETING",

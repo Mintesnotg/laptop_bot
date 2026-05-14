@@ -4,9 +4,11 @@ import path from "node:path";
 import { UsageTag } from "@prisma/client";
 import { Markup, Telegraf, session } from "telegraf";
 import { env } from "../env";
+import { buildTelegramListingHtml, validateTelegramListingContent } from "../services/telegramMessageFormatter";
+import { sendTelegramRichPost } from "../services/telegramMediaDelivery";
 import { findBudgetRange, normalizeUsageKey, usageLabelFromKey } from "../shared/constants";
 import { budgetKeyboard, ramKeyboard, resultsKeyboard, storageKeyboard, usageKeyboard } from "./keyboards";
-import { getOptionsSnapshot } from "./optionsClient";
+import { getOptionsSnapshot, getTelegramPostingConfigSnapshot } from "./optionsClient";
 import { fetchRecommendations } from "./recommendationClient";
 import { BotContext, defaultSession } from "./types";
 
@@ -140,48 +142,102 @@ async function showRecommendations(ctx: BotContext) {
   try {
     await savePreference(ctx);
 
-    const result = await fetchRecommendations({
-      telegramUserId: ctx.from ? BigInt(ctx.from.id) : undefined,
-      budgetKey: ctx.session.budgetKey,
-      usage: ctx.session.usageSelections,
-      ramGb: ctx.session.ramGb,
-      storageGb: ctx.session.storageGb,
-      limit: 5
-    });
+    const requestId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    const [result, postingConfig] = await Promise.all([
+      fetchRecommendations({
+        telegramUserId: ctx.from ? BigInt(ctx.from.id) : undefined,
+        budgetKey: ctx.session.budgetKey,
+        usage: ctx.session.usageSelections,
+        ramGb: ctx.session.ramGb,
+        storageGb: ctx.session.storageGb,
+        limit: 5
+      }),
+      getTelegramPostingConfigSnapshot()
+    ]);
+    if (!postingConfig.fullAddress.trim()) {
+      console.warn(`[telegram][config-warning] flow=bot-recommendation requestId=${requestId} field=fullAddress`);
+    }
+    if (!postingConfig.fallbackImageUrl.trim()) {
+      console.warn(`[telegram][config-warning] flow=bot-recommendation requestId=${requestId} field=fallbackImageUrl`);
+    }
 
     if (!result.items || result.items.length === 0) {
       await ctx.reply(
-        "No exact match found for this filter set. Try lowering RAM/storage or choosing another usage.",
+        result.hintMessage || "No close matches found. Try lowering RAM/storage or choosing a different usage.",
         resultsKeyboard()
       );
       return;
     }
 
-    ctx.session.step = "results";
+    const chatId = ctx.chat?.id ?? ctx.from?.id;
+    if (!chatId) {
+      await ctx.reply("Unable to determine the chat target for recommendations.", resultsKeyboard());
+      return;
+    }
 
-    const contactLines = [
-      "📞 Call Now:",
-      "📱 0936677621 OR",
-      "       0963357998",
-      "",
-      "📩 Telegram: @Minteh19"
-    ];
+    ctx.session.step = "results";
 
     await ctx.reply(
       [
         "Top laptop suggestions:",
         `Budget: ${result.filters.budget}`,
-        `Purpose: ${Array.isArray(result.filters.usage) ? result.filters.usage.join(", ") : result.filters.usage}`
+        `Purpose: ${Array.isArray(result.filters.usage) ? result.filters.usage.join(", ") : result.filters.usage}`,
+        `Match mode: ${result.matchMode || "strict"}`
       ].join("\n"),
       Markup.removeKeyboard()
     );
 
-    for (const [index, item] of (result.items as any[]).entries()) {
-      const header = `${index + 1}. ${item.brand} ${item.model}`;
-      const specs = `Specs: ${item.ramGb}GB RAM / ${item.storageGb}GB ${item.storageType}, ${item.cpu}${
-        item.gpu ? `, ${item.gpu}` : ""
-      }`;
-      const price = `Price: ${Number(item.price).toLocaleString()} ETB`;
+    let sentCount = 0;
+    let skippedCount = 0;
+
+    for (const item of result.items as any[]) {
+      const validationError = validateTelegramListingContent({
+        brand: item.brand ?? "",
+        model: item.model ?? "",
+        price: Number(item.price ?? 0),
+        ramGb: Number(item.ramGb ?? 0),
+        storageGb: Number(item.storageGb ?? 0),
+        storageType: item.storageType ?? "SSD",
+        cpu: item.cpu ?? "",
+        gpu: item.gpu ?? null,
+        usageTags:
+          Array.isArray(item.usageTags) && item.usageTags.length > 0
+            ? item.usageTags
+            : Array.isArray(ctx.session.usageSelections)
+              ? ctx.session.usageSelections
+              : [],
+        description: item.description ?? null,
+        featureLines: Array.isArray(item.featureLines) ? item.featureLines : []
+      });
+
+      if (validationError) {
+        skippedCount += 1;
+        console.warn(
+          `[bot][recommendation-skip] requestId=${requestId} productId=${item.id ?? "-"} reason=${validationError}`
+        );
+        continue;
+      }
+
+      const html = buildTelegramListingHtml(
+        {
+          brand: item.brand,
+          model: item.model,
+          price: Number(item.price),
+          ramGb: Number(item.ramGb),
+          storageGb: Number(item.storageGb),
+          storageType: item.storageType,
+          cpu: item.cpu,
+          gpu: item.gpu,
+          usageTags:
+            Array.isArray(item.usageTags) && item.usageTags.length > 0
+              ? item.usageTags
+              : ctx.session.usageSelections,
+          description: item.description,
+          featureLines: Array.isArray(item.featureLines) ? item.featureLines : []
+        },
+        postingConfig
+      );
 
       const imageUrls: string[] = Array.isArray(item.imageUrls)
         ? item.imageUrls.filter(Boolean)
@@ -189,18 +245,48 @@ async function showRecommendations(ctx: BotContext) {
           ? [item.imageUrl]
           : [];
 
-      const album = imageUrls.slice(0, 10).map((url) => ({ type: "photo" as const, media: url }));
+      const sendResult = await sendTelegramRichPost({
+        telegram: ctx.telegram,
+        chatId,
+        html,
+        imageUrls,
+        fallbackImageUrl: postingConfig.fallbackImageUrl,
+        context: {
+          flow: "bot-recommendation",
+          requestId,
+          productId: item.id,
+          chatId
+        }
+      });
 
-      if (album.length > 0) {
-        await ctx.replyWithMediaGroup(album);
+      if (!sendResult.success) {
+        skippedCount += 1;
+        console.warn(
+          `[bot][recommendation-send-failed] requestId=${requestId} productId=${item.id ?? "-"} message=${sendResult.message ?? "unknown"}`
+        );
+        continue;
       }
 
-      await ctx.reply([header, specs, price, "", ...contactLines].join("\n"), resultsKeyboard());
+      sentCount += 1;
     }
 
+    if (sentCount === 0) {
+      await ctx.reply(
+        result.hintMessage ||
+          "We found possible laptops, but could not deliver them with media right now. Please try again in a moment.",
+        resultsKeyboard()
+      );
+      return;
+    }
+
+    const summarySuffix = skippedCount > 0 ? ` (${skippedCount} skipped due to validation/media issues)` : "";
+    await ctx.reply(`Delivered ${sentCount} recommendation(s)${summarySuffix}.`, resultsKeyboard());
   } catch (error) {
-    console.error(error);
-    await ctx.reply("Something went wrong while fetching recommendations. Please try again.", resultsKeyboard());
+    console.error("[bot][recommendations-error]", error);
+    await ctx.reply(
+      "We could not fetch recommendations right now. Please try again, or adjust budget/RAM/storage filters.",
+      resultsKeyboard()
+    );
   }
 }
 

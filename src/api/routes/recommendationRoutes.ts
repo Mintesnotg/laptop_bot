@@ -19,7 +19,9 @@ recommendationRouter.post("/", async (req, res) => {
 
     return res.json(result);
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Failed to generate recommendations" });
+    console.error("[api][recommendations] failed", error);
+    return res.status(500).json({
+      message: "Failed to generate recommendations. Please try again or adjust your filters."
+    });
   }
 });

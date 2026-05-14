@@ -77,6 +77,8 @@ export const openApiDocument = {
               storageGb: { type: "integer" }
             }
           },
+          matchMode: { type: "string", enum: ["strict", "relaxed"] },
+          hintMessage: { type: "string" },
           items: {
             type: "array",
             items: {
@@ -91,9 +93,21 @@ export const openApiDocument = {
                 storageType: { type: "string", enum: ["SSD", "NVME", "HDD"] },
                 cpu: { type: "string" },
                 gpu: { type: "string", nullable: true },
+                usageTags: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/UsageTag" }
+                },
+                featureLines: {
+                  type: "array",
+                  items: { type: "string" }
+                },
                 description: { type: "string", nullable: true },
                 score: { type: "number" },
-                imageUrl: { type: "string", nullable: true }
+                imageUrl: { type: "string", nullable: true },
+                imageUrls: {
+                  type: "array",
+                  items: { type: "string", nullable: true }
+                }
               }
             }
           }
@@ -155,6 +169,10 @@ export const openApiDocument = {
             minItems: 1,
             items: { $ref: "#/components/schemas/UsageInput" }
           },
+          featureLines: {
+            type: "array",
+            items: { type: "string" }
+          },
           description: { type: "string" },
           imageUrls: {
             type: "array",
@@ -180,6 +198,17 @@ export const openApiDocument = {
         type: "object",
         properties: {
           channelTarget: { type: "string" }
+        }
+      },
+      TelegramPostingConfig: {
+        type: "object",
+        properties: {
+          sellerPhones: { type: "array", items: { type: "string" } },
+          telegramUsername: { type: "string" },
+          telegramProfileUrl: { type: "string" },
+          fullAddress: { type: "string" },
+          ctaText: { type: "string" },
+          fallbackImageUrl: { type: "string" }
         }
       },
       ChannelPostResult: {
@@ -420,7 +449,7 @@ export const openApiDocument = {
     "/api/admin/options/channel": {
       get: {
         tags: ["Admin"],
-        summary: "Get Telegram channel target for manual publish/sync",
+        summary: "Get Telegram channel target used for manual publish/replace",
         security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
         responses: {
           "200": {
@@ -435,7 +464,7 @@ export const openApiDocument = {
       },
       put: {
         tags: ["Admin"],
-        summary: "Set Telegram channel target for manual publish/sync",
+        summary: "Set Telegram channel target used for manual publish/replace",
         security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
         requestBody: {
           required: true,
@@ -458,10 +487,51 @@ export const openApiDocument = {
         }
       }
     },
+    "/api/admin/options/telegram-posting": {
+      get: {
+        tags: ["Admin"],
+        summary: "Get Telegram posting settings (contact/CTA/address/fallback image)",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        responses: {
+          "200": {
+            description: "Current Telegram posting settings",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/TelegramPostingConfig" }
+              }
+            }
+          }
+        }
+      },
+      put: {
+        tags: ["Admin"],
+        summary: "Update Telegram posting settings (contact/CTA/address/fallback image)",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/TelegramPostingConfig" }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Updated Telegram posting settings",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/TelegramPostingConfig" }
+              }
+            }
+          },
+          "400": { description: "Validation error" }
+        }
+      }
+    },
     "/api/admin/products/{id}": {
       put: {
         tags: ["Admin"],
-        summary: "Update product",
+        summary: "Update product (auto-replace Telegram listing when already listed)",
         security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
         requestBody: {
@@ -474,7 +544,7 @@ export const openApiDocument = {
         },
         responses: {
           "200": {
-            description: "Product updated; may include channelSync if a channel listing exists",
+            description: "Product updated; may include channelSync when an existing channel listing is replaced",
             content: {
               "application/json": {
                 schema: {
@@ -495,12 +565,12 @@ export const openApiDocument = {
     "/api/admin/products/{id}/publish": {
       post: {
         tags: ["Admin"],
-        summary: "Publish or sync an active product to the configured Telegram channel",
+        summary: "Publish or replace an active product listing on the configured Telegram channel",
         security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
         responses: {
           "200": {
-            description: "Publish or sync attempted",
+            description: "Publish/replace attempted",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ProductPublishResponse" }
@@ -515,7 +585,7 @@ export const openApiDocument = {
     "/api/admin/products/{id}/status": {
       patch: {
         tags: ["Admin"],
-        summary: "Activate or deactivate a product",
+        summary: "Activate or deactivate a product (deactivate removes listing; activate does not auto-publish)",
         security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
         requestBody: {
@@ -528,7 +598,8 @@ export const openApiDocument = {
         },
         responses: {
           "200": {
-            description: "Product status updated; may include channelSync when a channel listing is updated",
+            description:
+              "Product status updated; deactivation may include channelSync when listing removal is attempted",
             content: {
               "application/json": {
                 schema: {
@@ -542,6 +613,7 @@ export const openApiDocument = {
             }
           },
           "400": { description: "Validation error" },
+          "409": { description: "Active product with same brand and model already exists" },
           "404": { description: "Product not found" }
         }
       }
