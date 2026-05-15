@@ -4,108 +4,147 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Options</title>
-  <style>
-    body { font-family: "Segoe UI", Tahoma, sans-serif; margin: 0; padding: 24px; background: #f5f7fb; color: #1f2a44; }
-    .card { background: #fff; border: 1px solid #d7deea; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(300px,1fr)); gap: 16px; }
-    .inline { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    input, button { width: 100%; padding: 8px; border: 1px solid #d7deea; border-radius: 8px; font-size: 13px; }
-    button { background: #0b6cff; color: #fff; border: 0; cursor: pointer; }
-    button.secondary { background: #334155; }
-    button.danger { background: #b42318; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td { border-bottom: 1px solid #d7deea; padding: 6px 4px; text-align: left; }
-    .status { margin-top: 8px; font-size: 13px; }
-    .error { color: #b42318; }
-    .success { color: #067647; }
-    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .topbar a { color: #0b6cff; text-decoration: none; }
-    .muted { color: #64748b; font-size: 12px; }
-  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.1.8/css/dataTables.dataTables.min.css" />
+  <link rel="stylesheet" href="/admin/assets/admin-theme.css" />
 </head>
-<body>
-  <div class="topbar">
-    <h1>Options Management</h1>
-    <a href="/admin">Back to Admin</a>
-  </div>
+<body class="admin-app">
+  <div id="toastHost" class="toast-host" aria-live="polite" aria-relevant="additions"></div>
 
-  <div class="card">
+  <header class="admin-header">
+    <div class="admin-header-copy">
+      <h1>Options Management</h1>
+      <p class="muted">Configure channel target, posting settings, and bot option lists.</p>
+    </div>
+    <div class="admin-header-actions">
+      <a href="/admin" class="btn btn-secondary">
+        <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+        Back to Admin
+      </a>
+    </div>
+  </header>
+
+  <section class="card form-section">
     <h2>Telegram Channel Target</h2>
     <p class="muted">Set your public channel username (for example, @my_channel). Products are not posted automatically: use <strong>Publish</strong> on each row on the main Admin products table to send or sync listings to this channel.</p>
     <div class="inline">
-      <input id="channelTargetInput" placeholder="@my_channel or -1001234567890" />
-      <button id="saveChannelTargetBtn" class="secondary">Save Channel Target</button>
+      <div>
+        <label for="channelTargetInput">Channel target</label>
+        <input id="channelTargetInput" placeholder="@my_channel or -1001234567890" />
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button id="saveChannelTargetBtn" type="button" class="btn btn-secondary">Save Channel Target</button>
+      </div>
     </div>
     <p class="status" id="status"></p>
-  </div>
+  </section>
 
-  <div class="card">
+  <section class="card form-section">
     <h2>Telegram Posting Settings</h2>
     <p class="muted">Controls CTA/contact formatting for both channel posts and recommendation messages.</p>
     <label for="postingPhones">Seller Phones (one per line)</label>
-    <textarea id="postingPhones" rows="3" style="width:100%; padding:8px; border:1px solid #d7deea; border-radius:8px;"></textarea>
-    <div class="inline" style="margin-top:8px;">
-      <input id="postingUsername" placeholder="@telegram_username" />
-      <input id="postingProfileUrl" placeholder="https://t.me/telegram_username" />
+    <textarea id="postingPhones" rows="3"></textarea>
+    <div class="inline">
+      <div>
+        <label for="postingUsername">Telegram username</label>
+        <input id="postingUsername" placeholder="@telegram_username" />
+      </div>
+      <div>
+        <label for="postingProfileUrl">Profile URL</label>
+        <input id="postingProfileUrl" placeholder="https://t.me/telegram_username" />
+      </div>
     </div>
-    <input id="postingCtaText" placeholder="CTA text (example: Contact now to reserve this laptop today.)" style="margin-top:8px;" />
-    <input id="postingFallbackImageUrl" placeholder="Fallback image URL (/uploads/... or https://...)" style="margin-top:8px;" />
-    <label for="postingAddress" style="margin-top:8px;">Full Address</label>
-    <textarea id="postingAddress" rows="3" style="width:100%; padding:8px; border:1px solid #d7deea; border-radius:8px;"></textarea>
-    <button id="savePostingConfigBtn" class="secondary" style="margin-top:8px;">Save Posting Settings</button>
-  </div>
+    <label for="postingCtaText">CTA text</label>
+    <input id="postingCtaText" placeholder="Contact now to reserve this laptop today." />
+    <label for="postingFallbackImageUrl">Fallback image URL</label>
+    <input id="postingFallbackImageUrl" placeholder="/uploads/... or https://..." />
+    <label for="postingAddress">Full Address</label>
+    <textarea id="postingAddress" rows="3"></textarea>
+    <button id="savePostingConfigBtn" type="button" class="btn btn-secondary">Save Posting Settings</button>
+  </section>
 
   <div class="grid">
     <section class="card">
-      <h2>Budget</h2>
-      <table id="budgetTable">
-        <thead><tr><th>Key</th><th>Label</th><th>Min</th><th>Max</th><th>#</th><th>Active</th><th>Action</th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <div class="card-header">
+        <h2>Budget</h2>
+      </div>
+      <div class="table-wrap">
+        <table id="budgetTable" class="display compact">
+          <thead><tr><th>Key</th><th>Label</th><th>Min</th><th>Max</th><th>#</th><th>Active</th><th>Action</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
       <div class="inline"><input id="newBudgetKey" placeholder="key" /><input id="newBudgetLabel" placeholder="label" /></div>
       <div class="inline"><input id="newBudgetMin" type="number" placeholder="min" /><input id="newBudgetMax" type="number" placeholder="max" /></div>
-      <div class="inline"><input id="newBudgetSort" type="number" placeholder="sortOrder" /><label><input id="newBudgetActive" type="checkbox" checked /> Active</label></div>
-      <button id="addBudgetBtn">Add Budget</button>
+      <div class="inline"><input id="newBudgetSort" type="number" placeholder="sortOrder" /><label class="chip"><input id="newBudgetActive" type="checkbox" checked /> Active</label></div>
+      <button id="addBudgetBtn" type="button">Add Budget</button>
     </section>
 
     <section class="card">
-      <h2>RAM</h2>
-      <table id="ramTable">
-        <thead><tr><th>GB</th><th>Label</th><th>#</th><th>Active</th><th>Action</th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <div class="card-header">
+        <h2>RAM</h2>
+      </div>
+      <div class="table-wrap">
+        <table id="ramTable" class="display compact">
+          <thead><tr><th>GB</th><th>Label</th><th>#</th><th>Active</th><th>Action</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
       <div class="inline"><input id="newRamGb" type="number" placeholder="gb" /><input id="newRamLabel" placeholder="label" /></div>
-      <div class="inline"><input id="newRamSort" type="number" placeholder="sortOrder" /><label><input id="newRamActive" type="checkbox" checked /> Active</label></div>
-      <button id="addRamBtn">Add RAM</button>
+      <div class="inline"><input id="newRamSort" type="number" placeholder="sortOrder" /><label class="chip"><input id="newRamActive" type="checkbox" checked /> Active</label></div>
+      <button id="addRamBtn" type="button">Add RAM</button>
     </section>
 
     <section class="card">
-      <h2>Storage</h2>
-      <table id="storageTable">
-        <thead><tr><th>GB</th><th>Label</th><th>#</th><th>Active</th><th>Action</th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <div class="card-header">
+        <h2>Storage</h2>
+      </div>
+      <div class="table-wrap">
+        <table id="storageTable" class="display compact">
+          <thead><tr><th>GB</th><th>Label</th><th>#</th><th>Active</th><th>Action</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
       <div class="inline"><input id="newStorageGb" type="number" placeholder="gb" /><input id="newStorageLabel" placeholder="label" /></div>
-      <div class="inline"><input id="newStorageSort" type="number" placeholder="sortOrder" /><label><input id="newStorageActive" type="checkbox" checked /> Active</label></div>
-      <button id="addStorageBtn">Add Storage</button>
+      <div class="inline"><input id="newStorageSort" type="number" placeholder="sortOrder" /><label class="chip"><input id="newStorageActive" type="checkbox" checked /> Active</label></div>
+      <button id="addStorageBtn" type="button">Add Storage</button>
     </section>
   </div>
 
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
+  <script src="/admin/assets/admin-ui.js"></script>
   <script>
+    const { showToast, setButtonLoading, initDataTable } = window.AdminUI;
     const state = { token: localStorage.getItem("adminToken") || "" };
     const statusEl = document.getElementById("status");
+
+    const optionTables = {
+      budget: "#budgetTable",
+      ram: "#ramTable",
+      storage: "#storageTable"
+    };
 
     function setStatus(message, type = "normal") {
       statusEl.textContent = message;
       statusEl.className = type === "error" ? "status error" : type === "success" ? "status success" : "status";
     }
 
+    function notify(type, title, message) {
+      showToast({ type, title, message });
+      if (type === "success") {
+        setStatus(message, "success");
+      } else if (type === "error") {
+        setStatus(message, "error");
+      }
+    }
+
     function ensureAuthToken() {
       if (state.token) {
         return true;
       }
-
-      setStatus("Missing admin login token. Please login from /admin first.", "error");
+      notify("error", "Authentication required", "Missing admin login token. Please login from /admin first.");
       return false;
     }
 
@@ -139,6 +178,32 @@
       return response.json();
     }
 
+    async function withButtonAction(button, loadingLabel, action) {
+      setButtonLoading(button, true, loadingLabel);
+      try {
+        await action();
+      } catch (error) {
+        notify("error", "Action failed", error.message);
+        throw error;
+      } finally {
+        setButtonLoading(button, false);
+      }
+    }
+
+    function initOptionTables() {
+      Object.values(optionTables).forEach((selector) => {
+        initDataTable(selector, {
+          paging: false,
+          info: false,
+          searching: true,
+          ordering: true,
+          order: [],
+          dom: "ft",
+          language: { search: "Filter:" }
+        });
+      });
+    }
+
     async function loadAll() {
       const [channel, posting, budgets, ram, storage] = await Promise.all([
         callAdmin("/options/channel"),
@@ -158,6 +223,7 @@
       renderBudgetRows(budgets.items || []);
       renderRamRows(ram.items || []);
       renderStorageRows(storage.items || []);
+      initOptionTables();
     }
 
     function renderBudgetRows(items) {
@@ -165,25 +231,41 @@
       tbody.innerHTML = "";
       items.forEach((item) => {
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td><input data-f="key" value="${item.key}" /></td><td><input data-f="label" value="${item.label}" /></td><td><input data-f="min" type="number" value="${item.min}" /></td><td><input data-f="max" type="number" value="${item.max}" /></td><td><input data-f="sortOrder" type="number" value="${item.sortOrder}" /></td><td><input data-f="isActive" type="checkbox" ${item.isActive ? "checked" : ""} /></td><td><button data-a="save" class="secondary">Save</button><button data-a="del" class="danger">Delete</button></td>`;
-        tr.querySelector('[data-a="save"]').addEventListener("click", async () => {
-          await callAdmin(`/options/budgets/${item.id}`, { method: "PUT", body: JSON.stringify({
-            key: tr.querySelector('[data-f="key"]').value.trim(),
-            label: tr.querySelector('[data-f="label"]').value.trim(),
-            min: Number(tr.querySelector('[data-f="min"]').value),
-            max: Number(tr.querySelector('[data-f="max"]').value),
-            sortOrder: Number(tr.querySelector('[data-f="sortOrder"]').value),
-            isActive: tr.querySelector('[data-f="isActive"]').checked
-          })});
-          setStatus("Budget updated", "success");
-          await loadAll();
+        tr.innerHTML = `<td><input data-f="key" value="${item.key}" /></td><td><input data-f="label" value="${item.label}" /></td><td><input data-f="min" type="number" value="${item.min}" /></td><td><input data-f="max" type="number" value="${item.max}" /></td><td><input data-f="sortOrder" type="number" value="${item.sortOrder}" /></td><td><input data-f="isActive" type="checkbox" ${item.isActive ? "checked" : ""} /></td><td class="option-actions"></td>`;
+        const saveBtn = document.createElement("button");
+        saveBtn.type = "button";
+        saveBtn.className = "btn btn-secondary table-btn";
+        saveBtn.textContent = "Save";
+        saveBtn.addEventListener("click", async () => {
+          await withButtonAction(saveBtn, "Saving...", async () => {
+            await callAdmin(`/options/budgets/${item.id}`, {
+              method: "PUT",
+              body: JSON.stringify({
+                key: tr.querySelector('[data-f="key"]').value.trim(),
+                label: tr.querySelector('[data-f="label"]').value.trim(),
+                min: Number(tr.querySelector('[data-f="min"]').value),
+                max: Number(tr.querySelector('[data-f="max"]').value),
+                sortOrder: Number(tr.querySelector('[data-f="sortOrder"]').value),
+                isActive: tr.querySelector('[data-f="isActive"]').checked
+              })
+            });
+            notify("success", "Saved", "Budget updated.");
+            await loadAll();
+          });
         });
-        tr.querySelector('[data-a="del"]').addEventListener("click", async () => {
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "btn btn-danger table-btn";
+        delBtn.textContent = "Delete";
+        delBtn.addEventListener("click", async () => {
           if (!confirm(`Delete ${item.key}?`)) return;
-          await callAdmin(`/options/budgets/${item.id}`, { method: "DELETE" });
-          setStatus("Budget deleted", "success");
-          await loadAll();
+          await withButtonAction(delBtn, "Deleting...", async () => {
+            await callAdmin(`/options/budgets/${item.id}`, { method: "DELETE" });
+            notify("success", "Deleted", "Budget deleted.");
+            await loadAll();
+          });
         });
+        tr.querySelector(".option-actions").append(saveBtn, delBtn);
         tbody.appendChild(tr);
       });
     }
@@ -193,23 +275,39 @@
       tbody.innerHTML = "";
       items.forEach((item) => {
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td><input data-f="gb" type="number" value="${item.gb}" /></td><td><input data-f="label" value="${item.label}" /></td><td><input data-f="sortOrder" type="number" value="${item.sortOrder}" /></td><td><input data-f="isActive" type="checkbox" ${item.isActive ? "checked" : ""} /></td><td><button data-a="save" class="secondary">Save</button><button data-a="del" class="danger">Delete</button></td>`;
-        tr.querySelector('[data-a="save"]').addEventListener("click", async () => {
-          await callAdmin(`/options/ram/${item.id}`, { method: "PUT", body: JSON.stringify({
-            gb: Number(tr.querySelector('[data-f="gb"]').value),
-            label: tr.querySelector('[data-f="label"]').value.trim(),
-            sortOrder: Number(tr.querySelector('[data-f="sortOrder"]').value),
-            isActive: tr.querySelector('[data-f="isActive"]').checked
-          })});
-          setStatus("RAM updated", "success");
-          await loadAll();
+        tr.innerHTML = `<td><input data-f="gb" type="number" value="${item.gb}" /></td><td><input data-f="label" value="${item.label}" /></td><td><input data-f="sortOrder" type="number" value="${item.sortOrder}" /></td><td><input data-f="isActive" type="checkbox" ${item.isActive ? "checked" : ""} /></td><td class="option-actions"></td>`;
+        const saveBtn = document.createElement("button");
+        saveBtn.type = "button";
+        saveBtn.className = "btn btn-secondary table-btn";
+        saveBtn.textContent = "Save";
+        saveBtn.addEventListener("click", async () => {
+          await withButtonAction(saveBtn, "Saving...", async () => {
+            await callAdmin(`/options/ram/${item.id}`, {
+              method: "PUT",
+              body: JSON.stringify({
+                gb: Number(tr.querySelector('[data-f="gb"]').value),
+                label: tr.querySelector('[data-f="label"]').value.trim(),
+                sortOrder: Number(tr.querySelector('[data-f="sortOrder"]').value),
+                isActive: tr.querySelector('[data-f="isActive"]').checked
+              })
+            });
+            notify("success", "Saved", "RAM option updated.");
+            await loadAll();
+          });
         });
-        tr.querySelector('[data-a="del"]').addEventListener("click", async () => {
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "btn btn-danger table-btn";
+        delBtn.textContent = "Delete";
+        delBtn.addEventListener("click", async () => {
           if (!confirm(`Delete ${item.label}?`)) return;
-          await callAdmin(`/options/ram/${item.id}`, { method: "DELETE" });
-          setStatus("RAM deleted", "success");
-          await loadAll();
+          await withButtonAction(delBtn, "Deleting...", async () => {
+            await callAdmin(`/options/ram/${item.id}`, { method: "DELETE" });
+            notify("success", "Deleted", "RAM option deleted.");
+            await loadAll();
+          });
         });
+        tr.querySelector(".option-actions").append(saveBtn, delBtn);
         tbody.appendChild(tr);
       });
     }
@@ -219,112 +317,158 @@
       tbody.innerHTML = "";
       items.forEach((item) => {
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td><input data-f="gb" type="number" value="${item.gb}" /></td><td><input data-f="label" value="${item.label}" /></td><td><input data-f="sortOrder" type="number" value="${item.sortOrder}" /></td><td><input data-f="isActive" type="checkbox" ${item.isActive ? "checked" : ""} /></td><td><button data-a="save" class="secondary">Save</button><button data-a="del" class="danger">Delete</button></td>`;
-        tr.querySelector('[data-a="save"]').addEventListener("click", async () => {
-          await callAdmin(`/options/storage/${item.id}`, { method: "PUT", body: JSON.stringify({
-            gb: Number(tr.querySelector('[data-f="gb"]').value),
-            label: tr.querySelector('[data-f="label"]').value.trim(),
-            sortOrder: Number(tr.querySelector('[data-f="sortOrder"]').value),
-            isActive: tr.querySelector('[data-f="isActive"]').checked
-          })});
-          setStatus("Storage updated", "success");
-          await loadAll();
+        tr.innerHTML = `<td><input data-f="gb" type="number" value="${item.gb}" /></td><td><input data-f="label" value="${item.label}" /></td><td><input data-f="sortOrder" type="number" value="${item.sortOrder}" /></td><td><input data-f="isActive" type="checkbox" ${item.isActive ? "checked" : ""} /></td><td class="option-actions"></td>`;
+        const saveBtn = document.createElement("button");
+        saveBtn.type = "button";
+        saveBtn.className = "btn btn-secondary table-btn";
+        saveBtn.textContent = "Save";
+        saveBtn.addEventListener("click", async () => {
+          await withButtonAction(saveBtn, "Saving...", async () => {
+            await callAdmin(`/options/storage/${item.id}`, {
+              method: "PUT",
+              body: JSON.stringify({
+                gb: Number(tr.querySelector('[data-f="gb"]').value),
+                label: tr.querySelector('[data-f="label"]').value.trim(),
+                sortOrder: Number(tr.querySelector('[data-f="sortOrder"]').value),
+                isActive: tr.querySelector('[data-f="isActive"]').checked
+              })
+            });
+            notify("success", "Saved", "Storage option updated.");
+            await loadAll();
+          });
         });
-        tr.querySelector('[data-a="del"]').addEventListener("click", async () => {
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "btn btn-danger table-btn";
+        delBtn.textContent = "Delete";
+        delBtn.addEventListener("click", async () => {
           if (!confirm(`Delete ${item.label}?`)) return;
-          await callAdmin(`/options/storage/${item.id}`, { method: "DELETE" });
-          setStatus("Storage deleted", "success");
-          await loadAll();
+          await withButtonAction(delBtn, "Deleting...", async () => {
+            await callAdmin(`/options/storage/${item.id}`, { method: "DELETE" });
+            notify("success", "Deleted", "Storage option deleted.");
+            await loadAll();
+          });
         });
+        tr.querySelector(".option-actions").append(saveBtn, delBtn);
         tbody.appendChild(tr);
       });
     }
 
     document.getElementById("saveChannelTargetBtn").addEventListener("click", async () => {
+      const btn = document.getElementById("saveChannelTargetBtn");
       try {
-        await callAdmin("/options/channel", {
-          method: "PUT",
-          body: JSON.stringify({
-            channelTarget: document.getElementById("channelTargetInput").value.trim()
-          })
+        await withButtonAction(btn, "Saving...", async () => {
+          await callAdmin("/options/channel", {
+            method: "PUT",
+            body: JSON.stringify({
+              channelTarget: document.getElementById("channelTargetInput").value.trim()
+            })
+          });
+          notify("success", "Saved", "Channel target saved.");
         });
-        setStatus("Channel target saved", "success");
       } catch (e) {
-        setStatus(e.message, "error");
+        notify("error", "Save failed", e.message);
       }
     });
 
     document.getElementById("savePostingConfigBtn").addEventListener("click", async () => {
+      const btn = document.getElementById("savePostingConfigBtn");
       try {
-        const sellerPhones = document
-          .getElementById("postingPhones")
-          .value
-          .split(/\n/)
-          .map((x) => x.trim())
-          .filter(Boolean);
+        await withButtonAction(btn, "Saving...", async () => {
+          const sellerPhones = document
+            .getElementById("postingPhones")
+            .value
+            .split(/\n/)
+            .map((x) => x.trim())
+            .filter(Boolean);
 
-        await callAdmin("/options/telegram-posting", {
-          method: "PUT",
-          body: JSON.stringify({
-            sellerPhones,
-            telegramUsername: document.getElementById("postingUsername").value.trim(),
-            telegramProfileUrl: document.getElementById("postingProfileUrl").value.trim(),
-            ctaText: document.getElementById("postingCtaText").value.trim(),
-            fallbackImageUrl: document.getElementById("postingFallbackImageUrl").value.trim(),
-            fullAddress: document.getElementById("postingAddress").value.trim()
-          })
+          await callAdmin("/options/telegram-posting", {
+            method: "PUT",
+            body: JSON.stringify({
+              sellerPhones,
+              telegramUsername: document.getElementById("postingUsername").value.trim(),
+              telegramProfileUrl: document.getElementById("postingProfileUrl").value.trim(),
+              ctaText: document.getElementById("postingCtaText").value.trim(),
+              fallbackImageUrl: document.getElementById("postingFallbackImageUrl").value.trim(),
+              fullAddress: document.getElementById("postingAddress").value.trim()
+            })
+          });
+          notify("success", "Saved", "Telegram posting settings saved.");
         });
-        setStatus("Telegram posting settings saved", "success");
       } catch (e) {
-        setStatus(e.message, "error");
+        notify("error", "Save failed", e.message);
       }
     });
 
     document.getElementById("addBudgetBtn").addEventListener("click", async () => {
+      const btn = document.getElementById("addBudgetBtn");
       try {
-        await callAdmin("/options/budgets", { method: "POST", body: JSON.stringify({
-          key: document.getElementById("newBudgetKey").value.trim(),
-          label: document.getElementById("newBudgetLabel").value.trim(),
-          min: Number(document.getElementById("newBudgetMin").value),
-          max: Number(document.getElementById("newBudgetMax").value),
-          sortOrder: Number(document.getElementById("newBudgetSort").value || 0),
-          isActive: document.getElementById("newBudgetActive").checked
-        })});
-        setStatus("Budget added", "success");
-        await loadAll();
-      } catch (e) { setStatus(e.message, "error"); }
+        await withButtonAction(btn, "Adding...", async () => {
+          await callAdmin("/options/budgets", {
+            method: "POST",
+            body: JSON.stringify({
+              key: document.getElementById("newBudgetKey").value.trim(),
+              label: document.getElementById("newBudgetLabel").value.trim(),
+              min: Number(document.getElementById("newBudgetMin").value),
+              max: Number(document.getElementById("newBudgetMax").value),
+              sortOrder: Number(document.getElementById("newBudgetSort").value || 0),
+              isActive: document.getElementById("newBudgetActive").checked
+            })
+          });
+          notify("success", "Added", "Budget added.");
+          await loadAll();
+        });
+      } catch (e) {
+        notify("error", "Add failed", e.message);
+      }
     });
 
     document.getElementById("addRamBtn").addEventListener("click", async () => {
+      const btn = document.getElementById("addRamBtn");
       try {
-        await callAdmin("/options/ram", { method: "POST", body: JSON.stringify({
-          gb: Number(document.getElementById("newRamGb").value),
-          label: document.getElementById("newRamLabel").value.trim(),
-          sortOrder: Number(document.getElementById("newRamSort").value || 0),
-          isActive: document.getElementById("newRamActive").checked
-        })});
-        setStatus("RAM added", "success");
-        await loadAll();
-      } catch (e) { setStatus(e.message, "error"); }
+        await withButtonAction(btn, "Adding...", async () => {
+          await callAdmin("/options/ram", {
+            method: "POST",
+            body: JSON.stringify({
+              gb: Number(document.getElementById("newRamGb").value),
+              label: document.getElementById("newRamLabel").value.trim(),
+              sortOrder: Number(document.getElementById("newRamSort").value || 0),
+              isActive: document.getElementById("newRamActive").checked
+            })
+          });
+          notify("success", "Added", "RAM option added.");
+          await loadAll();
+        });
+      } catch (e) {
+        notify("error", "Add failed", e.message);
+      }
     });
 
     document.getElementById("addStorageBtn").addEventListener("click", async () => {
+      const btn = document.getElementById("addStorageBtn");
       try {
-        await callAdmin("/options/storage", { method: "POST", body: JSON.stringify({
-          gb: Number(document.getElementById("newStorageGb").value),
-          label: document.getElementById("newStorageLabel").value.trim(),
-          sortOrder: Number(document.getElementById("newStorageSort").value || 0),
-          isActive: document.getElementById("newStorageActive").checked
-        })});
-        setStatus("Storage added", "success");
-        await loadAll();
-      } catch (e) { setStatus(e.message, "error"); }
+        await withButtonAction(btn, "Adding...", async () => {
+          await callAdmin("/options/storage", {
+            method: "POST",
+            body: JSON.stringify({
+              gb: Number(document.getElementById("newStorageGb").value),
+              label: document.getElementById("newStorageLabel").value.trim(),
+              sortOrder: Number(document.getElementById("newStorageSort").value || 0),
+              isActive: document.getElementById("newStorageActive").checked
+            })
+          });
+          notify("success", "Added", "Storage option added.");
+          await loadAll();
+        });
+      } catch (e) {
+        notify("error", "Add failed", e.message);
+      }
     });
 
     if (state.token) {
-      loadAll().catch((e) => setStatus(e.message, "error"));
+      loadAll().catch((e) => notify("error", "Load failed", e.message));
     } else {
-      setStatus("Missing admin login token. Please login from /admin first.", "error");
+      notify("error", "Authentication required", "Missing admin login token. Please login from /admin first.");
     }
   </script>
 </body>

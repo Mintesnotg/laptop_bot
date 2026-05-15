@@ -1,7 +1,24 @@
 import { UsageTag } from "@prisma/client";
 import { prisma } from "../prisma";
-import { findBudgetRange, usageLabelFromKey } from "../shared/constants";
+import { findBudgetRange, usageLabelFromKey, type BudgetRange } from "../shared/constants";
 import { RecommendationRequestInput } from "../shared/contracts";
+
+async function resolveBudgetRange(budgetKey: string): Promise<BudgetRange | null> {
+  const dbBudget = await prisma.budgetOption.findFirst({
+    where: { key: budgetKey, isActive: true }
+  });
+
+  if (dbBudget) {
+    return {
+      key: dbBudget.key,
+      label: dbBudget.label,
+      min: dbBudget.min,
+      max: dbBudget.max
+    };
+  }
+
+  return findBudgetRange(budgetKey) ?? null;
+}
 
 type RankedProduct = {
   id: string;
@@ -277,7 +294,7 @@ function buildNoResultsHint(filters: RecommendationRequestInput) {
 }
 
 export async function recommendLaptops(filters: RecommendationRequestInput) {
-  const budget = findBudgetRange(filters.budgetKey);
+  const budget = await resolveBudgetRange(filters.budgetKey);
   if (!budget) {
     throw new Error("Invalid budget range selected");
   }
@@ -357,45 +374,53 @@ export async function recommendLaptops(filters: RecommendationRequestInput) {
   const matchMode = topResults.some((item) => item.source === "relaxed") ? "relaxed" : "strict";
   const primaryUsage = (validUsageSelections[0] ?? UsageTag.DAILY_BROWSING) as UsageTag;
 
-  const request = await prisma.recommendationRequest.create({
-    data: {
-      telegramUserId: userId,
-      budgetMin: budget.min,
-      budgetMax: budget.max,
-      usageTag: primaryUsage,
-      ramGb: filters.ramGb,
-      storageGb: filters.storageGb
-    }
-  });
-
-  if (topResults.length > 0) {
-    await prisma.recommendationResult.createMany({
-      data: topResults.map((product, index) => ({
-        requestId: request.id,
-        productId: product.id,
-        score: product.score,
-        rank: index + 1
-      }))
+  try {
+    const request = await prisma.recommendationRequest.create({
+      data: {
+        telegramUserId: userId,
+        budgetMin: budget.min,
+        budgetMax: budget.max,
+        usageTag: primaryUsage,
+        ramGb: filters.ramGb,
+        storageGb: filters.storageGb
+      }
     });
+
+    if (topResults.length > 0) {
+      await prisma.recommendationResult.createMany({
+        data: topResults.map((product, index) => ({
+          requestId: request.id,
+          productId: product.id,
+          score: product.score,
+          rank: index + 1
+        }))
+      });
+    }
+  } catch (error) {
+    console.warn("[recommendations] audit persistence failed", error);
   }
 
-  await prisma.userActivityLog.create({
-    data: {
-      userId,
-      action: "recommendation_requested",
-      payload: {
-        budgetKey: filters.budgetKey,
-        budgetLabel: budget.label,
-        usageLabel: usageLabels[0] ?? "-",
-        usageLabels,
-        usageKeys: filters.usage,
-        ramGb: filters.ramGb,
-        storageGb: filters.storageGb,
-        resultsCount: topResults.length,
-        matchMode
+  try {
+    await prisma.userActivityLog.create({
+      data: {
+        userId,
+        action: "recommendation_requested",
+        payload: {
+          budgetKey: filters.budgetKey,
+          budgetLabel: budget.label,
+          usageLabel: usageLabels[0] ?? "-",
+          usageLabels,
+          usageKeys: filters.usage,
+          ramGb: filters.ramGb,
+          storageGb: filters.storageGb,
+          resultsCount: topResults.length,
+          matchMode
+        }
       }
-    }
-  });
+    });
+  } catch (error) {
+    console.warn("[recommendations] activity log failed", error);
+  }
 
   const hintMessage = topResults.length === 0 ? buildNoResultsHint(filters) : undefined;
 

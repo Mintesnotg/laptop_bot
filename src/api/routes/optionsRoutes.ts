@@ -59,7 +59,9 @@ optionsRouter.get("/usage-tags", (_req, res) => {
 });
 
 optionsRouter.get("/telegram-posting", async (_req, res) => {
+ 
   const config = await getTelegramPostingConfig();
+ 
   return res.json(config);
 });
 

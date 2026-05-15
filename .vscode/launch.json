@@ -5,16 +5,16 @@
       "name": "Debug API + Bot (tsx)",
       "type": "node",
       "request": "launch",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--import", "tsx"],
+      "program": "${workspaceFolder}/src/index.ts",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",
       "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"],
       "sourceMaps": true,
       "smartStep": true,
-      "restart": true,
-      "autoAttachChildProcesses": true
+      "restart": true
     },
     {
       "name": "Attach API + Bot (9229)",

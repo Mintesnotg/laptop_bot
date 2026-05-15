@@ -265,7 +265,7 @@ async function validateRemoteImageUrl(url: string) {
   return ok;
 }
 
-async function validateImageUrl(imageUrl: string) {
+async function validateImageUrl(imageUrl: string, skipRemoteValidation = false) {
   const localPath = resolveLocalUploadPath(imageUrl);
   if (localPath) {
     return fs.existsSync(localPath);
@@ -275,16 +275,24 @@ async function validateImageUrl(imageUrl: string) {
     return false;
   }
 
+  if (skipRemoteValidation) {
+    return true;
+  }
+
   return validateRemoteImageUrl(imageUrl);
 }
 
-async function resolveValidatedMedia(imageUrls: string[], fallbackImageUrl: string) {
+async function resolveValidatedMedia(
+  imageUrls: string[],
+  fallbackImageUrl: string,
+  skipRemoteImageValidation = false
+) {
   const validMedia: ValidatedMedia[] = [];
   const invalidUrls: string[] = [];
   const normalizedUrls = normalizeImageUrls(imageUrls);
 
   for (const imageUrl of normalizedUrls) {
-    const isValid = await validateImageUrl(imageUrl);
+    const isValid = await validateImageUrl(imageUrl, skipRemoteImageValidation);
     if (!isValid) {
       invalidUrls.push(imageUrl);
       continue;
@@ -300,7 +308,7 @@ async function resolveValidatedMedia(imageUrls: string[], fallbackImageUrl: stri
   let usedFallback = false;
   let fallbackRejected = false;
   if (validMedia.length === 0 && fallbackImageUrl) {
-    const fallbackValid = await validateImageUrl(fallbackImageUrl);
+    const fallbackValid = await validateImageUrl(fallbackImageUrl, skipRemoteImageValidation);
     if (fallbackValid) {
       const localPath = resolveLocalUploadPath(fallbackImageUrl);
       validMedia.push({
@@ -327,10 +335,15 @@ export async function sendTelegramRichPost(params: {
   html: string;
   imageUrls: string[];
   fallbackImageUrl: string;
+  skipRemoteImageValidation?: boolean;
   context: TelegramSendContext;
 }): Promise<TelegramRichPostResult> {
-  const { telegram, chatId, html, imageUrls, fallbackImageUrl, context } = params;
-  const { validMedia, invalidUrls, usedFallback, fallbackRejected } = await resolveValidatedMedia(imageUrls, fallbackImageUrl);
+  const { telegram, chatId, html, imageUrls, fallbackImageUrl, skipRemoteImageValidation = false, context } = params;
+  const { validMedia, invalidUrls, usedFallback, fallbackRejected } = await resolveValidatedMedia(
+    imageUrls,
+    fallbackImageUrl,
+    skipRemoteImageValidation
+  );
   const messageIds: string[] = [];
 
   const sendTextOnly = async () => {

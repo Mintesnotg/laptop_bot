@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BUDGET_KEYS, normalizeUsageKey, USAGE_KEYS, type UsageKey } from "./constants";
+import { normalizeUsageKey, USAGE_KEYS, type UsageKey } from "./constants";
 
 export const usageTagSchema = z.string().transform((value, ctx) => {
   const normalized = normalizeUsageKey(value);
@@ -37,7 +37,7 @@ const featureLineSchema = z.string().trim().min(1).max(120);
 
 export const recommendationRequestSchema = z.object({
   telegramUserId: z.coerce.bigint().optional(),
-  budgetKey: z.enum(BUDGET_KEYS),
+  budgetKey: z.string().trim().min(1),
   usage: recommendationUsageSchema,
   ramGb: z.number().int().min(4),
   storageGb: z.number().int().min(128),

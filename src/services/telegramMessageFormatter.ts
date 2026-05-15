@@ -128,7 +128,7 @@ export function buildTelegramListingHtml(content: TelegramListingContent, config
     `🔥 <b>${escapeTelegramHtml(`${content.brand} ${content.model}`)}</b>`,
     "",
     "💻 <b>Specifications:</b>",
-    `• ${escapeTelegramHtml(`${content.ramGb}GB RAM`)}`,
+    `• ${escapeTelegramHtml(`${content.ramGb} GB RAM`)}`,
     `• ${escapeTelegramHtml(`${content.storageGb}GB ${content.storageType}`)}`,
     `• ${escapeTelegramHtml(content.cpu)}`,
     `• ${escapeTelegramHtml(content.gpu?.trim() ? content.gpu : "Integrated Graphics")}`,
@@ -147,7 +147,7 @@ export function buildTelegramListingHtml(content: TelegramListingContent, config
     `📱 ${escapeTelegramHtml(phonesLine)}`,
     "",
     `📩 <b>Telegram Username:</b> ${escapeTelegramHtml(telegramUsername)}`,
-    `🔗 <b>Telegram Link:</b> ${escapeTelegramHtml(telegramProfileUrl)}`
+    // `🔗 <b>Telegram Link:</b> ${escapeTelegramHtml(telegramProfileUrl)}`
   ];
 
   lines.push("", "📍 <b>Address:</b>", escapeTelegramHtml(fullAddress));

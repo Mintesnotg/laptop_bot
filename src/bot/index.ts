@@ -36,6 +36,7 @@ function buildTelegramAgent() {
 }
 
 const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN, {
+  handlerTimeout: 180_000,
   telegram: {
     apiRoot: env.TELEGRAM_API_ROOT,
     agent: buildTelegramAgent()
@@ -140,8 +141,6 @@ async function showRecommendations(ctx: BotContext) {
   await sendOrEdit(ctx, "Checking top laptops for your criteria...", Markup.removeKeyboard());
 
   try {
-    await savePreference(ctx);
-
     const requestId =
       typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
     const [result, postingConfig] = await Promise.all([
@@ -153,7 +152,10 @@ async function showRecommendations(ctx: BotContext) {
         storageGb: ctx.session.storageGb,
         limit: 5
       }),
-      getTelegramPostingConfigSnapshot()
+      getTelegramPostingConfigSnapshot(),
+      savePreference(ctx).catch((error) => {
+        console.warn("[bot][preference-save-failed]", error);
+      })
     ]);
     if (!postingConfig.fullAddress.trim()) {
       console.warn(`[telegram][config-warning] flow=bot-recommendation requestId=${requestId} field=fullAddress`);
@@ -251,6 +253,7 @@ async function showRecommendations(ctx: BotContext) {
         html,
         imageUrls,
         fallbackImageUrl: postingConfig.fallbackImageUrl,
+        skipRemoteImageValidation: true,
         context: {
           flow: "bot-recommendation",
           requestId,

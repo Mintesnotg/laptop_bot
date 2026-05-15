@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Laptop Bot Admin</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.1.8/css/dataTables.dataTables.min.css" />
+  <link rel="stylesheet" href="/admin/assets/admin-theme.css" />
   <style>
     :root {
       --bg: #f5f7fb;
@@ -405,13 +407,26 @@
     }
   </style>
 </head>
-<body>
-  <h1>Laptop Bot Admin</h1>
-  <p class="muted">Manage products, upload pictures, and monitor recommendation analytics.</p>
-  <p><a href="/admin/options">Go to Options Page</a></p>
+<body class="admin-app">
+  <div id="toastHost" class="toast-host" aria-live="polite" aria-relevant="additions"></div>
 
-  <div class="grid">
-    <section class="card">
+  <header class="admin-header">
+    <div class="admin-header-copy">
+      <h1>Laptop Bot Admin</h1>
+      <p class="muted">Manage products, upload pictures, and monitor recommendation analytics.</p>
+    </div>
+    <div class="admin-header-actions">
+      <p id="whoami" class="header-whoami muted"></p>
+      <a href="/admin/options" class="btn btn-secondary">
+        <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+        Go to Options Page
+      </a>
+      <button id="logoutBtn" type="button" class="btn btn-ghost btn-logout hidden">Logout</button>
+    </div>
+  </header>
+
+  <div class="grid login-grid">
+    <section class="card login-card" id="loginSection">
       <h2>Admin Login</h2>
       <div id="loginFormWrap">
         <label for="username">Username</label>
@@ -423,16 +438,95 @@
         <button id="loginBtn">Login</button>
       </div>
 
-      <div id="loggedInWrap" class="hidden">
-        <p id="whoami" class="muted"></p>
-        <button id="logoutBtn" class="secondary">Logout</button>
-      </div>
-
       <p class="status" id="authStatus"></p>
     </section>
+  </div>
 
-    <section class="card" id="productCreateSection">
-      <h2>Add Product</h2>
+  <div class="workspace-grid">
+    <section class="card grid-full hidden" id="productsSection">
+      <div class="card-header products-toolbar">
+        <h2>Products</h2>
+        <button id="openCreateProductBtn" type="button" class="btn btn-primary table-btn">
+          <i class="fa-solid fa-plus" aria-hidden="true"></i>
+          Add Product
+        </button>
+      </div>
+      <div class="inline products-search">
+        <div>
+          <label for="searchInput">Search by Brand / Model</label>
+          <input id="searchInput" placeholder="HP, Dell, ThinkPad..." />
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="searchBtn" type="button" class="btn btn-secondary">Search</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table id="productsTable" class="display compact">
+          <thead>
+            <tr>
+              <th>Image</th>
+              <th>Brand</th>
+              <th>Model</th>
+              <th>Price</th>
+              <th>RAM</th>
+              <th>Storage</th>
+              <th>Status</th>
+              <th>Channel</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="pagination">
+        <button id="prevPageBtn" type="button" class="btn btn-secondary">Prev</button>
+        <button id="nextPageBtn" type="button" class="btn btn-secondary">Next</button>
+        <span id="pageInfo" class="muted"></span>
+        <label for="pageSizeSelect" style="margin:0;">Page size</label>
+        <select id="pageSizeSelect">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="20">20</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="card grid-full hidden" id="analyticsSection">
+      <div class="card-header">
+        <h2>Analytics Dashboard</h2>
+        <button id="reloadAnalyticsBtn" type="button" class="btn btn-ghost">
+          <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+          Reload Analytics
+        </button>
+      </div>
+      <div id="analyticsStats" class="stats-grid" aria-live="polite"></div>
+      <div class="insights-grid">
+        <article class="insight-card">
+          <h3>Popular Usage</h3>
+          <ul id="popularUsage" class="insight-list"></ul>
+        </article>
+        <article class="insight-card">
+          <h3>Top Budget Queries</h3>
+          <ul id="topBudgets" class="insight-list"></ul>
+        </article>
+        <article class="insight-card">
+          <h3>Top Recommended Products</h3>
+          <ul id="topProducts" class="insight-list"></ul>
+        </article>
+      </div>
+    </section>
+  </div>
+
+  <div id="productCreateBackdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="productCreateTitle">
+    <div class="modal modal-lg">
+      <header>
+        <h3 id="productCreateTitle">Add Product</h3>
+        <button id="productCreateCloseBtn" type="button" class="btn btn-ghost table-btn">Close</button>
+      </header>
+      <div class="body">
       <form id="productForm">
         <div class="inline">
           <div>
@@ -492,67 +586,10 @@
         <button type="submit" id="createProductBtn">Create Product</button>
         <p class="status" id="productStatus"></p>
       </form>
-    </section>
+      </div>
+    </div>
   </div>
 
-  <div class="grid" style="margin-top: 16px;">
-    <section class="card" id="productsSection">
-      <h2>Products</h2>
-      <div class="inline">
-        <div>
-          <label for="searchInput">Search by Brand / Model</label>
-          <input id="searchInput" placeholder="HP, Dell, ThinkPad..." />
-        </div>
-        <div>
-          <label>&nbsp;</label>
-          <button id="searchBtn" class="secondary">Search</button>
-        </div>
-      </div>
-
-      <div style="overflow:auto; margin-top: 10px;">
-        <table id="productsTable">
-          <thead>
-            <tr>
-              <th>Image</th>
-              <th>Brand</th>
-              <th>Model</th>
-              <th>Price</th>
-              <th>RAM</th>
-              <th>Storage</th>
-              <th>Status</th>
-              <th>Channel</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-
-      <div class="pagination">
-        <button id="prevPageBtn" class="secondary">Prev</button>
-        <button id="nextPageBtn" class="secondary">Next</button>
-        <span id="pageInfo" class="muted"></span>
-        <label for="pageSizeSelect" style="margin:0;">Page size</label>
-        <select id="pageSizeSelect">
-          <option value="5">5</option>
-          <option value="10" selected>10</option>
-          <option value="20">20</option>
-        </select>
-      </div>
-    </section>
-
-    <section class="card" id="analyticsSection">
-      <h2>Analytics</h2>
-      <button id="reloadAnalyticsBtn">Reload Analytics</button>
-      <h3>Popular Usage</h3>
-      <ul id="popularUsage"></ul>
-      <h3>Top Budget Queries</h3>
-      <ul id="topBudgets"></ul>
-      <h3>Top Recommended Products</h3>
-      <ul id="topProducts"></ul>
-    </section>
-
-  </div>
 
   <div id="productModalBackdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true">
     <div class="modal">
@@ -614,7 +651,12 @@
     </div>
   </div>
 
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
+  <script src="/admin/assets/admin-ui.js"></script>
   <script>
+    const { showToast, setButtonLoading, setContainerOverlay, setButtonsDisabled, initDataTable } = window.AdminUI;
+
     const state = {
       token: localStorage.getItem("adminToken") || "",
       user: null,
@@ -684,8 +726,10 @@
     const productStatus = document.getElementById("productStatus");
     const createProductBtn = document.getElementById("createProductBtn");
     const loginFormWrap = document.getElementById("loginFormWrap");
-    const loggedInWrap = document.getElementById("loggedInWrap");
+    const loginSection = document.getElementById("loginSection");
+    const logoutBtn = document.getElementById("logoutBtn");
     const whoami = document.getElementById("whoami");
+    const openCreateProductBtn = document.getElementById("openCreateProductBtn");
     const pageSizeSelect = document.getElementById("pageSizeSelect");
     pageSizeSelect.value = String(state.pageSize);
 
@@ -707,11 +751,28 @@
     function setAuthenticatedUI() {
       const isLoggedIn = Boolean(state.token);
       loginFormWrap.classList.toggle("hidden", isLoggedIn);
-      loggedInWrap.classList.toggle("hidden", !isLoggedIn);
-      document.getElementById("productCreateSection").classList.toggle("hidden", !isLoggedIn);
+      loginSection.classList.toggle("hidden", isLoggedIn);
+      logoutBtn.classList.toggle("hidden", !isLoggedIn);
       document.getElementById("productsSection").classList.toggle("hidden", !isLoggedIn);
       document.getElementById("analyticsSection").classList.toggle("hidden", !isLoggedIn);
+      if (openCreateProductBtn) {
+        openCreateProductBtn.disabled = !isLoggedIn;
+      }
       whoami.textContent = isLoggedIn && state.user ? `Logged in as ${state.user.username}` : "";
+    }
+
+    function openCreateProductModal() {
+      document.getElementById("productCreateBackdrop").classList.remove("hidden");
+      document.body.style.overflow = "hidden";
+      const brandInput = document.getElementById("brand");
+      if (brandInput) {
+        brandInput.focus();
+      }
+    }
+
+    function closeCreateProductModal() {
+      document.getElementById("productCreateBackdrop").classList.add("hidden");
+      document.body.style.overflow = "";
     }
 
     async function login(username, password) {
@@ -1071,7 +1132,7 @@
         const channelCell = document.createElement("td");
         const pub = product.channelPublication;
         if (!pub) {
-          channelCell.textContent = "—";
+          channelCell.textContent = "â€”";
           channelCell.className = "muted";
         } else if (pub.lastSyncError) {
           channelCell.textContent = "Sync error";
@@ -1147,22 +1208,8 @@
           publishBtn.title = "Publish or sync to Telegram channel";
           publishBtn.setAttribute("aria-label", "Publish or sync to Telegram channel");
           publishBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i>';
-          publishBtn.addEventListener("click", async () => {
-            try {
-              const result = await callAdmin(`/products/${product.id}/publish`, { method: "POST" });
-              if (result.channelPost?.attempted && !result.channelPost?.success) {
-                setStatus(
-                  productStatus,
-                  result.channelPost.message || "Telegram channel publish failed.",
-                  "error"
-                );
-              } else {
-                setStatus(productStatus, "Product published or synced to Telegram channel.", "success");
-              }
-              await loadProducts();
-            } catch (error) {
-              setStatus(productStatus, error.message, "error");
-            }
+          publishBtn.addEventListener("click", () => {
+            void publishProduct(product, publishBtn, actionsWrap, tr);
           });
           actionsWrap.appendChild(publishBtn);
         }
@@ -1185,26 +1232,247 @@
       document.getElementById("pageInfo").textContent = `Page ${state.page} of ${state.totalPages}`;
       document.getElementById("prevPageBtn").disabled = state.page <= 1;
       document.getElementById("nextPageBtn").disabled = state.page >= state.totalPages;
+      initProductsDataTable();
+    }
+
+    function renderInsightList(element, items, emptyText) {
+      if (!items.length) {
+        element.innerHTML = `<li class="insight-empty">${emptyText}</li>`;
+        return;
+      }
+      element.innerHTML = items.map((item) => `<li>${item}</li>`).join("");
+    }
+
+    function renderStatCard({ iconClass, icon, label, value, sub }) {
+      return `
+        <article class="stat-card">
+          <div class="stat-card-icon ${iconClass}"><i class="fa-solid ${icon}" aria-hidden="true"></i></div>
+          <div class="stat-card-body">
+            <div class="stat-card-label">${label}</div>
+            <div class="stat-card-value">${value}</div>
+            <div class="stat-card-sub">${sub}</div>
+          </div>
+        </article>
+      `;
+    }
+
+    async function fetchAllProducts() {
+      const pageSize = 50;
+      let page = 1;
+      let totalPages = 1;
+      const items = [];
+
+      do {
+        const data = await callAdmin(`/products?page=${page}&pageSize=${pageSize}`);
+        items.push(...(data.items || []));
+        totalPages = data.pagination?.totalPages || 1;
+        page += 1;
+      } while (page <= totalPages);
+
+      return items;
+    }
+
+    function computePublishMetrics(products) {
+      let listedOk = 0;
+      let syncErrors = 0;
+      let lastPublishedAt = null;
+
+      for (const product of products) {
+        const pub = product.channelPublication;
+        if (!pub) {
+          continue;
+        }
+        if (pub.lastSyncError) {
+          syncErrors += 1;
+        } else {
+          listedOk += 1;
+        }
+        if (pub.lastPublishedAt) {
+          const ts = new Date(pub.lastPublishedAt).getTime();
+          if (!lastPublishedAt || ts > lastPublishedAt) {
+            lastPublishedAt = ts;
+          }
+        }
+      }
+
+      const denom = listedOk + syncErrors;
+      const successRate = denom > 0 ? `${Math.round((listedOk / denom) * 100)}%` : "â€”";
+
+      return {
+        listedOk,
+        syncErrors,
+        successRate,
+        lastPublishedAt: lastPublishedAt ? new Date(lastPublishedAt).toLocaleString() : "â€”"
+      };
+    }
+
+    async function loadDashboardMetrics() {
+      const [analytics, channel, products] = await Promise.all([
+        callAdmin("/analytics"),
+        callAdmin("/options/channel"),
+        fetchAllProducts()
+      ]);
+
+      const totalRequests = (analytics.popularUsage || []).reduce(
+        (sum, entry) => sum + (entry._count?._all || 0),
+        0
+      );
+      const uniqueUsage = (analytics.popularUsage || []).length;
+      const topUsage = analytics.popularUsage?.[0];
+      const topBudget = analytics.topBudgets?.[0];
+      const topProduct = analytics.topProducts?.[0];
+      const publishMetrics = computePublishMetrics(products);
+      const channelConfigured = Boolean((channel.channelTarget || "").trim());
+      const channelStatus = channelConfigured
+        ? `Target: ${channel.channelTarget}`
+        : "Channel target not configured";
+
+      document.getElementById("analyticsStats").innerHTML = [
+        renderStatCard({
+          iconClass: "blue",
+          icon: "fa-chart-line",
+          label: "Recommendation Requests",
+          value: totalRequests.toLocaleString(),
+          sub: `${uniqueUsage} usage type(s) tracked`
+        }),
+        renderStatCard({
+          iconClass: "green",
+          icon: "fa-paper-plane",
+          label: "Channel Listings",
+          value: publishMetrics.listedOk.toLocaleString(),
+          sub: "Products listed without sync errors"
+        }),
+        renderStatCard({
+          iconClass: "red",
+          icon: "fa-triangle-exclamation",
+          label: "Sync Errors",
+          value: publishMetrics.syncErrors.toLocaleString(),
+          sub: "Listings needing attention"
+        }),
+        renderStatCard({
+          iconClass: "amber",
+          icon: "fa-percent",
+          label: "Publish Success Rate",
+          value: publishMetrics.successRate,
+          sub: "Based on listed vs error states"
+        }),
+        renderStatCard({
+          iconClass: "slate",
+          icon: "fa-clock",
+          label: "Last Publish Time",
+          value: publishMetrics.lastPublishedAt === "â€”" ? "â€”" : "Recent",
+          sub: publishMetrics.lastPublishedAt
+        }),
+        renderStatCard({
+          iconClass: channelConfigured ? "green" : "amber",
+          icon: "fa-bullhorn",
+          label: "Channel Status",
+          value: channelConfigured ? "Ready" : "Not set",
+          sub: channelStatus
+        }),
+        renderStatCard({
+          iconClass: "blue",
+          icon: "fa-star",
+          label: "Top Recommended",
+          value: topProduct ? `${topProduct.count}` : "â€”",
+          sub: topProduct ? `${topProduct.brand} ${topProduct.model}` : "No recommendation data yet"
+        }),
+        renderStatCard({
+          iconClass: "slate",
+          icon: "fa-wallet",
+          label: "Top Budget Query",
+          value: topBudget ? topBudget._count._all : "â€”",
+          sub: topBudget
+            ? `${topBudget.budgetMin.toLocaleString()}-${topBudget.budgetMax.toLocaleString()} ETB`
+            : "No budget query data yet"
+        })
+      ].join("");
+
+      renderInsightList(
+        document.getElementById("popularUsage"),
+        (analytics.popularUsage || []).map((entry) => `${entry.usageTag}: ${entry._count._all}`),
+        "No usage analytics yet."
+      );
+      renderInsightList(
+        document.getElementById("topBudgets"),
+        (analytics.topBudgets || []).map(
+          (entry) => `${entry.budgetMin.toLocaleString()}-${entry.budgetMax.toLocaleString()} ETB: ${entry._count._all}`
+        ),
+        "No budget analytics yet."
+      );
+      renderInsightList(
+        document.getElementById("topProducts"),
+        (analytics.topProducts || []).map((entry) => `${entry.brand} ${entry.model}: ${entry.count}`),
+        "No product recommendation analytics yet."
+      );
+
+      if (topUsage) {
+        const sub = document.querySelector("#analyticsStats .stat-card:nth-child(1) .stat-card-sub");
+        if (sub) {
+          sub.textContent = `Top usage: ${topUsage.usageTag} (${topUsage._count._all})`;
+        }
+      }
     }
 
     async function loadAnalytics() {
-      const data = await callAdmin("/analytics");
+      await loadDashboardMetrics();
+    }
 
-      const popularUsage = document.getElementById("popularUsage");
-      const topBudgets = document.getElementById("topBudgets");
-      const topProducts = document.getElementById("topProducts");
+    function initProductsDataTable() {
+      initDataTable("#productsTable", {
+        paging: false,
+        info: false,
+        searching: true,
+        ordering: true,
+        order: [],
+        dom: "ft",
+        language: { search: "Filter current page:" }
+      });
+    }
 
-      popularUsage.innerHTML = data.popularUsage
-        .map((entry) => `<li>${entry.usageTag}: ${entry._count._all}</li>`)
-        .join("");
+    async function publishProduct(product, publishBtn, actionsWrap, row) {
+      const productsSection = document.getElementById("productsSection");
+      setButtonLoading(publishBtn, true, "Publishing...");
+      setButtonsDisabled(actionsWrap, true);
+      if (row) {
+        row.classList.add("row-busy");
+      }
+      setContainerOverlay(productsSection, true, "Publishing to channel...");
 
-      topBudgets.innerHTML = data.topBudgets
-        .map((entry) => `<li>${entry.budgetMin.toLocaleString()}-${entry.budgetMax.toLocaleString()} ETB: ${entry._count._all}</li>`)
-        .join("");
-
-      topProducts.innerHTML = data.topProducts
-        .map((entry) => `<li>${entry.brand} ${entry.model}: ${entry.count}</li>`)
-        .join("");
+      try {
+        const result = await callAdmin(`/products/${product.id}/publish`, { method: "POST" });
+        if (result.channelPost?.attempted && !result.channelPost?.success) {
+          const detail = result.channelPost.message || "Telegram channel publish failed.";
+          showToast({
+            type: "error",
+            title: "Publish failed",
+            message: `Failed to publish to the channel. Please try again. ${detail}`
+          });
+          setStatus(productStatus, detail, "error");
+        } else {
+          showToast({
+            type: "success",
+            title: "Published",
+            message: "Successfully published to the channel."
+          });
+          setStatus(productStatus, "Product published or synced to Telegram channel.", "success");
+        }
+        await loadProducts();
+      } catch (error) {
+        showToast({
+          type: "error",
+          title: "Publish failed",
+          message: `Failed to publish to the channel. Please try again. ${error.message}`
+        });
+        setStatus(productStatus, error.message, "error");
+      } finally {
+        setButtonLoading(publishBtn, false);
+        setButtonsDisabled(actionsWrap, false);
+        if (row) {
+          row.classList.remove("row-busy");
+        }
+        setContainerOverlay(productsSection, false);
+      }
     }
 
     async function bootstrap() {
@@ -1260,6 +1528,7 @@
       state.token = "";
       state.user = null;
       localStorage.removeItem("adminToken");
+      closeCreateProductModal();
       setAuthenticatedUI();
       setStatus(authStatus, "Logged out.", "success");
       document.querySelector("#productsTable tbody").innerHTML = "";
@@ -1396,6 +1665,7 @@
         document.getElementById("productForm").reset();
         state.uploadedImageUrls = [];
         renderUploadedImages();
+        closeCreateProductModal();
         state.page = 1;
         await loadProducts();
       } catch (error) {
@@ -1407,6 +1677,19 @@
     });
 
     bootstrap();
+
+    openCreateProductBtn.addEventListener("click", openCreateProductModal);
+    document.getElementById("productCreateCloseBtn").addEventListener("click", closeCreateProductModal);
+    document.getElementById("productCreateBackdrop").addEventListener("click", (event) => {
+      if (event.target && event.target.id === "productCreateBackdrop") {
+        closeCreateProductModal();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !document.getElementById("productCreateBackdrop").classList.contains("hidden")) {
+        closeCreateProductModal();
+      }
+    });
 
     document.getElementById("productModalCloseBtn").addEventListener("click", closeProductModal);
     document.getElementById("productModalBackdrop").addEventListener("click", (event) => {
