@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
-import { UsageTag } from "@prisma/client";
 import { Markup, Telegraf, session } from "telegraf";
 import { env } from "../env";
 import { buildTelegramListingHtml, validateTelegramListingContent } from "../services/telegramMessageFormatter";
@@ -78,12 +77,13 @@ async function askBudget(ctx: BotContext) {
 
 async function askUsage(ctx: BotContext) {
   ctx.session.step = "usage";
+  const options = await getOptionsSnapshot();
   const selectedLabels = ctx.session.usageSelections.map((key) => usageLabelFromKey(key));
   const selectedText = selectedLabels.length > 0 ? `\nSelected: ${selectedLabels.join(", ")}` : "\nSelected: none yet";
   await sendOrEdit(
     ctx,
     `What will you use it for? (select one or more, then tap Done)${selectedText}`,
-    usageKeyboard(ctx.session.usageSelections)
+    usageKeyboard(ctx.session.usageSelections, options.usageTags)
   );
 }
 
@@ -101,9 +101,7 @@ async function askStorage(ctx: BotContext) {
 
 async function savePreference(ctx: BotContext) {
   const budget = findBudgetRange(ctx.session.budgetKey ?? "");
-  const validUsageValues = new Set(Object.values(UsageTag));
-  const primaryUsage =
-    ctx.session.usageSelections.find((usage) => validUsageValues.has(usage as UsageTag)) ?? UsageTag.DAILY_BROWSING;
+  const primaryUsage = normalizeUsageKey(ctx.session.usageSelections[0] ?? "DAILY_BROWSING") ?? "DAILY_BROWSING";
 
   if (!budget || !ctx.from || !primaryUsage || !ctx.session.ramGb || !ctx.session.storageGb) {
     return;

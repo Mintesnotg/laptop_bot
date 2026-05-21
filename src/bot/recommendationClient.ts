@@ -1,8 +1,8 @@
 import { env } from "../env";
-import { CLIENT_USAGE_VALUES, type UsageKey } from "../shared/constants";
+import { CLIENT_USAGE_VALUES } from "../shared/constants";
 
 export const usageValues = CLIENT_USAGE_VALUES;
-export type RecommendationUsage = (typeof usageValues)[number] | UsageKey;
+export type RecommendationUsage = (typeof usageValues)[number] | string;
 
 const FETCH_TIMEOUT_MS = 30_000;
 

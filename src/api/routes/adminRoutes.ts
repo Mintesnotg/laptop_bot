@@ -1,4 +1,4 @@
-import { Prisma, Product, ProductChannelPublication, ProductImage, StorageType, UsageTag } from "@prisma/client";
+import { Prisma, Product, ProductChannelPublication, ProductImage, StorageType } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { type Request, Router } from "express";
 import jwt from "jsonwebtoken";
@@ -21,6 +21,7 @@ import {
   normalizeTelegramPostingConfig,
   upsertTelegramPostingConfig
 } from "../../services/telegramPostingConfig";
+import { DEFAULT_USAGE_OPTIONS, normalizeUsageKey } from "../../shared/constants";
 import { productCreateSchema, productUpdateSchema } from "../../shared/contracts";
 import { requireAdminAuth } from "../middleware/requireAdminAuth";
 
@@ -67,6 +68,14 @@ const storageOptionCreateSchema = z.object({
 });
 
 const storageOptionUpdateSchema = storageOptionCreateSchema.partial();
+const usageTagOptionCreateSchema = z.object({
+  key: z.string().trim().min(1),
+  label: z.string().trim().min(1),
+  sortOrder: z.number().int().default(0),
+  isActive: z.boolean().default(true)
+});
+
+const usageTagOptionUpdateSchema = usageTagOptionCreateSchema.partial();
 const channelOptionUpdateSchema = z.object({
   channelTarget: z.string().trim().max(255)
 });
@@ -121,6 +130,20 @@ function isMissingProductFeatureLinesColumnError(error: unknown) {
         ? (error as { message: string }).message
         : "";
   return message.toLowerCase().includes("product.featurelines");
+}
+
+function isMissingUsageTagOptionTableError(error: unknown) {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2021") {
+    return false;
+  }
+
+  const tableName = typeof error.meta?.table === "string" ? error.meta.table : "";
+  if (tableName.includes("UsageTagOption")) {
+    return true;
+  }
+
+  const message = error.message.toLowerCase();
+  return message.includes("usagetagoption");
 }
 
 function withFeatureLinesFallback<T extends ProductCompatibilityRow>(product: T) {
@@ -339,6 +362,14 @@ async function getTelegramChannelTarget() {
   });
 
   return normalizeTelegramChannelTarget(setting?.value ?? "");
+}
+
+function normalizeUsageOptionKeyOrThrow(rawKey: string) {
+  const normalized = normalizeUsageKey(rawKey);
+  if (!normalized) {
+    throw new Error("Usage key must be a non-empty value.");
+  }
+  return normalized;
 }
 
 adminRouter.post("/auth/login", async (req, res) => {
@@ -564,7 +595,7 @@ adminRouter.post("/products", async (req, res) => {
       storageType: parsed.data.storageType as StorageType,
       cpu: parsed.data.cpu,
       gpu: parsed.data.gpu,
-      usageTags: parsed.data.usageTags as UsageTag[],
+      usageTags: parsed.data.usageTags,
       description: parsed.data.description,
       isActive: true,
       images: {
@@ -708,7 +739,7 @@ adminRouter.put("/products/:id", async (req, res) => {
     storageType: parsed.data.storageType as StorageType | undefined,
     cpu: parsed.data.cpu,
     gpu: parsed.data.gpu,
-    usageTags: parsed.data.usageTags as UsageTag[] | undefined,
+    usageTags: parsed.data.usageTags,
     description: parsed.data.description
   };
 
@@ -1009,4 +1040,120 @@ adminRouter.put("/options/storage/:id", async (req, res) => {
 adminRouter.delete("/options/storage/:id", async (req, res) => {
   await prisma.storageOption.delete({ where: { id: req.params.id } });
   return res.status(204).send();
+});
+
+adminRouter.get("/options/usage-tags", async (_req, res) => {
+  try {
+    const items = await prisma.usageTagOption.findMany({
+      orderBy: [{ sortOrder: "asc" }, { label: "asc" }]
+    });
+    return res.json({ items });
+  } catch (error) {
+    if (!isMissingUsageTagOptionTableError(error)) {
+      throw error;
+    }
+
+    return res.json({
+      items: DEFAULT_USAGE_OPTIONS.map((entry, index) => ({
+        id: entry.key,
+        key: entry.key,
+        label: entry.label,
+        sortOrder: index,
+        isActive: true
+      })),
+      migrationRequired: true
+    });
+  }
+});
+
+adminRouter.post("/options/usage-tags", async (req, res) => {
+  const parsed = usageTagOptionCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
+  }
+
+  let key: string;
+  try {
+    key = normalizeUsageOptionKeyOrThrow(parsed.data.key);
+  } catch (error) {
+    return res.status(400).json({
+      message: error instanceof Error ? error.message : "Invalid usage key."
+    });
+  }
+
+  try {
+    const created = await prisma.usageTagOption.create({
+      data: {
+        key,
+        label: parsed.data.label,
+        sortOrder: parsed.data.sortOrder,
+        isActive: parsed.data.isActive
+      }
+    });
+    return res.status(201).json(created);
+  } catch (error) {
+    if (isMissingUsageTagOptionTableError(error)) {
+      return res.status(503).json({ message: "Usage tag options table is not initialized. Run migrations first." });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return res.status(409).json({ message: `Usage key "${key}" already exists.` });
+    }
+    throw error;
+  }
+});
+
+adminRouter.put("/options/usage-tags/:id", async (req, res) => {
+  const parsed = usageTagOptionUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
+  }
+
+  const data: {
+    key?: string;
+    label?: string;
+    sortOrder?: number;
+    isActive?: boolean;
+  } = {
+    label: parsed.data.label,
+    sortOrder: parsed.data.sortOrder,
+    isActive: parsed.data.isActive
+  };
+
+  if (parsed.data.key !== undefined) {
+    try {
+      data.key = normalizeUsageOptionKeyOrThrow(parsed.data.key);
+    } catch (error) {
+      return res.status(400).json({
+        message: error instanceof Error ? error.message : "Invalid usage key."
+      });
+    }
+  }
+
+  try {
+    const updated = await prisma.usageTagOption.update({
+      where: { id: req.params.id },
+      data
+    });
+    return res.json(updated);
+  } catch (error) {
+    if (isMissingUsageTagOptionTableError(error)) {
+      return res.status(503).json({ message: "Usage tag options table is not initialized. Run migrations first." });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return res.status(409).json({ message: `Usage key "${data.key}" already exists.` });
+    }
+    throw error;
+  }
+});
+
+adminRouter.delete("/options/usage-tags/:id", async (req, res) => {
+  try {
+    await prisma.usageTagOption.delete({ where: { id: req.params.id } });
+    return res.status(204).send();
+  } catch (error) {
+    if (isMissingUsageTagOptionTableError(error)) {
+      return res.status(503).json({ message: "Usage tag options table is not initialized. Run migrations first." });
+    }
+    throw error;
+  }
 });

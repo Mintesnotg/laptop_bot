@@ -110,6 +110,21 @@
       <div class="inline"><input id="newStorageSort" type="number" placeholder="sortOrder" /><label class="chip"><input id="newStorageActive" type="checkbox" checked /> Active</label></div>
       <button id="addStorageBtn" type="button">Add Storage</button>
     </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Usage Tags</h2>
+      </div>
+      <div class="table-wrap">
+        <table id="usageTable" class="display compact">
+          <thead><tr><th>Key</th><th>Label</th><th>#</th><th>Active</th><th>Action</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="inline"><input id="newUsageKey" placeholder="key" /><input id="newUsageLabel" placeholder="label" /></div>
+      <div class="inline"><input id="newUsageSort" type="number" placeholder="sortOrder" /><label class="chip"><input id="newUsageActive" type="checkbox" checked /> Active</label></div>
+      <button id="addUsageBtn" type="button">Add Usage Tag</button>
+    </section>
   </div>
 
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -123,7 +138,8 @@
     const optionTables = {
       budget: "#budgetTable",
       ram: "#ramTable",
-      storage: "#storageTable"
+      storage: "#storageTable",
+      usage: "#usageTable"
     };
 
     function setStatus(message, type = "normal") {
@@ -205,13 +221,57 @@
     }
 
     async function loadAll() {
-      const [channel, posting, budgets, ram, storage] = await Promise.all([
+      const [channelR, postingR, budgetsR, ramR, storageR, usageR] = await Promise.allSettled([
         callAdmin("/options/channel"),
         callAdmin("/options/telegram-posting"),
         callAdmin("/options/budgets"),
         callAdmin("/options/ram"),
-        callAdmin("/options/storage")
+        callAdmin("/options/storage"),
+        callAdmin("/options/usage-tags")
       ]);
+
+      if (channelR.status === "rejected" || postingR.status === "rejected" || budgetsR.status === "rejected" || ramR.status === "rejected" || storageR.status === "rejected") {
+        throw new Error(
+          channelR.status === "rejected"
+            ? channelR.reason?.message
+            : postingR.status === "rejected"
+              ? postingR.reason?.message
+              : budgetsR.status === "rejected"
+                ? budgetsR.reason?.message
+                : ramR.status === "rejected"
+                  ? ramR.reason?.message
+                  : storageR.status === "rejected"
+                    ? storageR.reason?.message
+                    : "Failed to load options."
+        );
+      }
+
+      const channel = channelR.value;
+      const posting = postingR.value;
+      const budgets = budgetsR.value;
+      const ram = ramR.value;
+      const storage = storageR.value;
+      let usage = usageR.status === "fulfilled" ? usageR.value : { items: [] };
+
+      if (usageR.status === "rejected") {
+        try {
+          const publicUsageResponse = await fetch("/api/options/usage-tags", { cache: "no-store" });
+          if (publicUsageResponse.ok) {
+            const publicUsage = await publicUsageResponse.json();
+            usage = {
+              items: (publicUsage.items || []).map((entry, index) => ({
+                id: entry.key,
+                key: entry.key,
+                label: entry.label,
+                sortOrder: index,
+                isActive: true
+              }))
+            };
+          }
+        } catch (_error) {
+          // no-op: keep empty usage fallback
+        }
+      }
 
       document.getElementById("channelTargetInput").value = channel.channelTarget || "";
       document.getElementById("postingPhones").value = (posting.sellerPhones || []).join("\n");
@@ -223,6 +283,14 @@
       renderBudgetRows(budgets.items || []);
       renderRamRows(ram.items || []);
       renderStorageRows(storage.items || []);
+      renderUsageRows(usage.items || []);
+
+      if (usageR.status === "rejected") {
+        notify("warning", "Usage tags fallback", "Usage tags loaded in fallback mode. Admin usage-tag CRUD requires backend update/migration.");
+      } else if (usage.migrationRequired) {
+        notify("warning", "Usage tags fallback", "Usage tags are running in fallback mode. Run DB migration to enable full CRUD.");
+      }
+
       initOptionTables();
     }
 
@@ -354,6 +422,48 @@
       });
     }
 
+    function renderUsageRows(items) {
+      const tbody = document.querySelector("#usageTable tbody");
+      tbody.innerHTML = "";
+      items.forEach((item) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td><input data-f="key" value="${item.key}" /></td><td><input data-f="label" value="${item.label}" /></td><td><input data-f="sortOrder" type="number" value="${item.sortOrder}" /></td><td><input data-f="isActive" type="checkbox" ${item.isActive ? "checked" : ""} /></td><td class="option-actions"></td>`;
+        const saveBtn = document.createElement("button");
+        saveBtn.type = "button";
+        saveBtn.className = "btn btn-secondary table-btn";
+        saveBtn.textContent = "Save";
+        saveBtn.addEventListener("click", async () => {
+          await withButtonAction(saveBtn, "Saving...", async () => {
+            await callAdmin(`/options/usage-tags/${item.id}`, {
+              method: "PUT",
+              body: JSON.stringify({
+                key: tr.querySelector('[data-f="key"]').value.trim(),
+                label: tr.querySelector('[data-f="label"]').value.trim(),
+                sortOrder: Number(tr.querySelector('[data-f="sortOrder"]').value),
+                isActive: tr.querySelector('[data-f="isActive"]').checked
+              })
+            });
+            notify("success", "Saved", "Usage tag updated.");
+            await loadAll();
+          });
+        });
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "btn btn-danger table-btn";
+        delBtn.textContent = "Delete";
+        delBtn.addEventListener("click", async () => {
+          if (!confirm(`Delete ${item.key}?`)) return;
+          await withButtonAction(delBtn, "Deleting...", async () => {
+            await callAdmin(`/options/usage-tags/${item.id}`, { method: "DELETE" });
+            notify("success", "Deleted", "Usage tag deleted.");
+            await loadAll();
+          });
+        });
+        tr.querySelector(".option-actions").append(saveBtn, delBtn);
+        tbody.appendChild(tr);
+      });
+    }
+
     document.getElementById("saveChannelTargetBtn").addEventListener("click", async () => {
       const btn = document.getElementById("saveChannelTargetBtn");
       try {
@@ -458,6 +568,27 @@
             })
           });
           notify("success", "Added", "Storage option added.");
+          await loadAll();
+        });
+      } catch (e) {
+        notify("error", "Add failed", e.message);
+      }
+    });
+
+    document.getElementById("addUsageBtn").addEventListener("click", async () => {
+      const btn = document.getElementById("addUsageBtn");
+      try {
+        await withButtonAction(btn, "Adding...", async () => {
+          await callAdmin("/options/usage-tags", {
+            method: "POST",
+            body: JSON.stringify({
+              key: document.getElementById("newUsageKey").value.trim(),
+              label: document.getElementById("newUsageLabel").value.trim(),
+              sortOrder: Number(document.getElementById("newUsageSort").value || 0),
+              isActive: document.getElementById("newUsageActive").checked
+            })
+          });
+          notify("success", "Added", "Usage tag added.");
           await loadAll();
         });
       } catch (e) {

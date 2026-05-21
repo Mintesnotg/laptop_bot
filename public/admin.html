@@ -405,6 +405,63 @@
       padding: 6px;
       font-size: 12px;
     }
+
+    body.admin-app.logged-out {
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+    }
+
+    body.admin-app.logged-out .admin-header {
+      margin-bottom: 12px;
+      justify-content: center;
+      text-align: center;
+      gap: 10px;
+    }
+
+    body.admin-app.logged-out .admin-header-copy {
+      flex: 0 1 560px;
+    }
+
+    body.admin-app.logged-out .admin-header-actions {
+      justify-content: center;
+      width: 100%;
+    }
+
+    body.admin-app.logged-out .login-grid {
+      flex: 1;
+      margin-bottom: 0;
+      align-content: center;
+      justify-content: center;
+      width: 100%;
+      padding: 8px 0 20px;
+    }
+
+    body.admin-app.logged-out .login-card {
+      width: min(420px, 100%);
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    body.admin-app.logged-out .login-card h2,
+    body.admin-app.logged-out .login-card label,
+    body.admin-app.logged-out .login-card .status {
+      text-align: center;
+    }
+
+    body.admin-app.logged-out .login-card input {
+      text-align: center;
+    }
+
+    @media (max-width: 720px) {
+      body.admin-app.logged-out .admin-header {
+        margin-bottom: 8px;
+      }
+
+      body.admin-app.logged-out .login-grid {
+        padding: 4px 0 12px;
+      }
+    }
   </style>
 </head>
 <body class="admin-app">
@@ -417,7 +474,7 @@
     </div>
     <div class="admin-header-actions">
       <p id="whoami" class="header-whoami muted"></p>
-      <a href="/admin/options" class="btn btn-secondary">
+      <a id="optionsPageLink" href="/admin/options" class="btn btn-secondary hidden">
         <i class="fa-solid fa-sliders" aria-hidden="true"></i>
         Go to Options Page
       </a>
@@ -728,6 +785,7 @@
     const loginFormWrap = document.getElementById("loginFormWrap");
     const loginSection = document.getElementById("loginSection");
     const logoutBtn = document.getElementById("logoutBtn");
+    const optionsPageLink = document.getElementById("optionsPageLink");
     const whoami = document.getElementById("whoami");
     const openCreateProductBtn = document.getElementById("openCreateProductBtn");
     const pageSizeSelect = document.getElementById("pageSizeSelect");
@@ -753,8 +811,10 @@
       loginFormWrap.classList.toggle("hidden", isLoggedIn);
       loginSection.classList.toggle("hidden", isLoggedIn);
       logoutBtn.classList.toggle("hidden", !isLoggedIn);
+      optionsPageLink.classList.toggle("hidden", !isLoggedIn);
       document.getElementById("productsSection").classList.toggle("hidden", !isLoggedIn);
       document.getElementById("analyticsSection").classList.toggle("hidden", !isLoggedIn);
+      document.body.classList.toggle("logged-out", !isLoggedIn);
       if (openCreateProductBtn) {
         openCreateProductBtn.disabled = !isLoggedIn;
       }
@@ -1125,6 +1185,8 @@
 
         const statusCell = document.createElement("td");
         const statusPill = document.createElement("span");
+
+        statusPill.style.color = "#fff";
         statusPill.className = `pill ${product.isActive ? "active" : "inactive"}`;
         statusPill.textContent = product.isActive ? "Active" : "Inactive";
         statusCell.appendChild(statusPill);
@@ -1132,7 +1194,7 @@
         const channelCell = document.createElement("td");
         const pub = product.channelPublication;
         if (!pub) {
-          channelCell.textContent = "â€”";
+          channelCell.textContent = "-";
           channelCell.className = "muted";
         } else if (pub.lastSyncError) {
           channelCell.textContent = "Sync error";
@@ -1296,13 +1358,13 @@
       }
 
       const denom = listedOk + syncErrors;
-      const successRate = denom > 0 ? `${Math.round((listedOk / denom) * 100)}%` : "â€”";
+      const successRate = denom > 0 ? `${Math.round((listedOk / denom) * 100)}%` : "-";
 
       return {
         listedOk,
         syncErrors,
         successRate,
-        lastPublishedAt: lastPublishedAt ? new Date(lastPublishedAt).toLocaleString() : "â€”"
+        lastPublishedAt: lastPublishedAt ? new Date(lastPublishedAt).toLocaleString() : "-"
       };
     }
 
@@ -1360,7 +1422,7 @@
           iconClass: "slate",
           icon: "fa-clock",
           label: "Last Publish Time",
-          value: publishMetrics.lastPublishedAt === "â€”" ? "â€”" : "Recent",
+          value: publishMetrics.lastPublishedAt === "-" ? "-" : "Recent",
           sub: publishMetrics.lastPublishedAt
         }),
         renderStatCard({
@@ -1374,14 +1436,14 @@
           iconClass: "blue",
           icon: "fa-star",
           label: "Top Recommended",
-          value: topProduct ? `${topProduct.count}` : "â€”",
+          value: topProduct ? `${topProduct.count}` : "-",
           sub: topProduct ? `${topProduct.brand} ${topProduct.model}` : "No recommendation data yet"
         }),
         renderStatCard({
           iconClass: "slate",
           icon: "fa-wallet",
           label: "Top Budget Query",
-          value: topBudget ? topBudget._count._all : "â€”",
+          value: topBudget ? topBudget._count._all : "-",
           sub: topBudget
             ? `${topBudget.budgetMin.toLocaleString()}-${topBudget.budgetMax.toLocaleString()} ETB`
             : "No budget query data yet"

@@ -6,27 +6,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum UsageTag {
-  STUDENT
-  OFFICE
-  DESIGN
-  GAMING
-  CODING
-  GRAPHICS_DESIGN
-  ARCHITECTURE
-  FINANCE
-  MARKETING
-  HR
-  SALES
-  ENGINEERING
-  DEVOPS
-  PRODUCT
-  UX_UI
-  ANALYTICS
-  READING
-  DAILY_BROWSING
-}
-
 enum StorageType {
   SSD
   NVME
@@ -58,7 +37,7 @@ model UserPreference {
   userId    Int
   budgetMin Int
   budgetMax Int
-  usageTag  UsageTag
+  usageTag  String
   ramGb     Int
   storageGb Int
   createdAt DateTime     @default(now())
@@ -77,7 +56,7 @@ model Product {
   storageType           StorageType            @default(SSD)
   cpu                   String
   gpu                   String?
-  usageTags             UsageTag[]
+  usageTags             String[]               @default([])
   featureLines          String[]               @default([])
   description           String?
   isActive              Boolean                @default(true)
@@ -123,7 +102,7 @@ model RecommendationRequest {
   telegramUserId Int?
   budgetMin      Int
   budgetMax      Int
-  usageTag       UsageTag
+  usageTag       String
   ramGb          Int
   storageGb      Int
   createdAt      DateTime               @default(now())
@@ -198,6 +177,18 @@ model RamOption {
 model StorageOption {
   id        String   @id @default(cuid())
   gb        Int      @unique
+  label     String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model UsageTagOption {
+  id        String   @id @default(cuid())
+  key       String   @unique
   label     String
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)

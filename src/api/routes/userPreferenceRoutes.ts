@@ -1,4 +1,3 @@
-import { UsageTag } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../prisma";
@@ -48,7 +47,7 @@ userPreferenceRouter.post("/", async (req, res) => {
       userId: user.id,
       budgetMin: parsed.data.budgetMin,
       budgetMax: parsed.data.budgetMax,
-      usageTag: parsed.data.usageTag as UsageTag,
+      usageTag: parsed.data.usageTag,
       ramGb: parsed.data.ramGb,
       storageGb: parsed.data.storageGb
     }

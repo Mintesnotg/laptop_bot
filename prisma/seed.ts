@@ -1,8 +1,8 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
-import { StorageType, UsageTag } from "@prisma/client";
+import { StorageType } from "@prisma/client";
 import { prisma } from "../src/prisma";
-import { BUDGET_RANGES, RAM_OPTIONS, STORAGE_OPTIONS } from "../src/shared/constants";
+import { BUDGET_RANGES, DEFAULT_USAGE_OPTIONS, RAM_OPTIONS, STORAGE_OPTIONS } from "../src/shared/constants";
 
 type SeedProduct = {
   brand: string;
@@ -13,7 +13,7 @@ type SeedProduct = {
   storageType: StorageType;
   cpu: string;
   gpu?: string;
-  usageTags: UsageTag[];
+  usageTags: string[];
   description: string;
   imageUrls: string[];
 };
@@ -28,7 +28,7 @@ const products: SeedProduct[] = [
     storageType: StorageType.SSD,
     cpu: "Intel Core i5 12th Gen",
     gpu: "Intel Iris Xe",
-    usageTags: [UsageTag.STUDENT, UsageTag.OFFICE, UsageTag.DAILY_BROWSING],
+    usageTags: ["STUDENT", "OFFICE", "DAILY_BROWSING"],
     description: "Balanced laptop for students and daily office use.",
     imageUrls: ["https://images.example.com/hp-pavilion-15-1.jpg"]
   },
@@ -41,7 +41,7 @@ const products: SeedProduct[] = [
     storageType: StorageType.NVME,
     cpu: "AMD Ryzen 5 5500U",
     gpu: "AMD Radeon Graphics",
-    usageTags: [UsageTag.STUDENT, UsageTag.CODING, UsageTag.OFFICE],
+    usageTags: ["STUDENT", "CODING", "OFFICE"],
     description: "Good value option for coding and productivity.",
     imageUrls: ["https://images.example.com/lenovo-ideapad-3-1.jpg"]
   },
@@ -54,7 +54,7 @@ const products: SeedProduct[] = [
     storageType: StorageType.SSD,
     cpu: "Intel Core i7 12th Gen",
     gpu: "Intel Iris Xe",
-    usageTags: [UsageTag.OFFICE, UsageTag.CODING, UsageTag.READING],
+    usageTags: ["OFFICE", "CODING", "READING"],
     description: "Strong office and software development performance.",
     imageUrls: ["https://images.example.com/dell-inspiron-3520-1.jpg"]
   },
@@ -67,7 +67,7 @@ const products: SeedProduct[] = [
     storageType: StorageType.NVME,
     cpu: "Intel Core i7 12th Gen",
     gpu: "NVIDIA RTX 3050",
-    usageTags: [UsageTag.GAMING, UsageTag.DESIGN, UsageTag.GRAPHICS_DESIGN],
+    usageTags: ["GAMING", "DESIGN", "GRAPHICS_DESIGN"],
     description: "Entry gaming laptop for design and heavy graphics workloads.",
     imageUrls: ["https://images.example.com/asus-tuf-f15-1.jpg"]
   },
@@ -80,7 +80,7 @@ const products: SeedProduct[] = [
     storageType: StorageType.NVME,
     cpu: "AMD Ryzen 7 6800H",
     gpu: "NVIDIA RTX 3060",
-    usageTags: [UsageTag.GAMING, UsageTag.GRAPHICS_DESIGN, UsageTag.ARCHITECTURE],
+    usageTags: ["GAMING", "GRAPHICS_DESIGN", "ARCHITECTURE"],
     description: "High-performance laptop for gaming and architectural design.",
     imageUrls: ["https://images.example.com/acer-nitro-5-1.jpg"]
   },
@@ -93,7 +93,7 @@ const products: SeedProduct[] = [
     storageType: StorageType.SSD,
     cpu: "Apple M2",
     gpu: "Integrated 10-core GPU",
-    usageTags: [UsageTag.DESIGN, UsageTag.CODING, UsageTag.OFFICE],
+    usageTags: ["DESIGN", "CODING", "OFFICE"],
     description: "Premium thin-and-light option for creators and developers.",
     imageUrls: ["https://images.example.com/macbook-air-m2-1.jpg"]
   },
@@ -106,7 +106,7 @@ const products: SeedProduct[] = [
     storageType: StorageType.SSD,
     cpu: "Intel Core i5 13th Gen",
     gpu: "NVIDIA RTX 2050",
-    usageTags: [UsageTag.GAMING, UsageTag.CODING, UsageTag.DESIGN],
+    usageTags: ["GAMING", "CODING", "DESIGN"],
     description: "Versatile performance option with dedicated graphics.",
     imageUrls: ["https://images.example.com/hp-victus-16-1.jpg"]
   },
@@ -119,7 +119,7 @@ const products: SeedProduct[] = [
     storageType: StorageType.NVME,
     cpu: "Intel Core i5 13th Gen",
     gpu: "Intel Iris Xe",
-    usageTags: [UsageTag.OFFICE, UsageTag.CODING, UsageTag.READING],
+    usageTags: ["OFFICE", "CODING", "READING"],
     description: "Business-class laptop for reliability and long-term use.",
     imageUrls: ["https://images.example.com/thinkpad-e14-1.jpg"]
   },
@@ -132,7 +132,7 @@ const products: SeedProduct[] = [
     storageType: StorageType.SSD,
     cpu: "Intel Core i5 12th Gen",
     gpu: "Intel UHD",
-    usageTags: [UsageTag.OFFICE, UsageTag.STUDENT, UsageTag.DAILY_BROWSING],
+    usageTags: ["OFFICE", "STUDENT", "DAILY_BROWSING"],
     description: "Affordable office machine with solid multitasking.",
     imageUrls: ["https://images.example.com/dell-vostro-3520-1.jpg"]
   },
@@ -145,7 +145,7 @@ const products: SeedProduct[] = [
     storageType: StorageType.NVME,
     cpu: "Intel Core i5 12th Gen",
     gpu: "NVIDIA GTX 1650",
-    usageTags: [UsageTag.GAMING, UsageTag.CODING, UsageTag.GRAPHICS_DESIGN],
+    usageTags: ["GAMING", "CODING", "GRAPHICS_DESIGN"],
     description: "Budget-friendly gaming option for mixed workloads.",
     imageUrls: ["https://images.example.com/msi-gf63-thin-1.jpg"]
   }
@@ -212,6 +212,23 @@ async function main() {
     });
   }
 
+  for (const [index, entry] of DEFAULT_USAGE_OPTIONS.entries()) {
+    await prisma.usageTagOption.upsert({
+      where: { key: entry.key },
+      update: {
+        label: entry.label,
+        sortOrder: index,
+        isActive: true
+      },
+      create: {
+        key: entry.key,
+        label: entry.label,
+        sortOrder: index,
+        isActive: true
+      }
+    });
+  }
+
   await prisma.adminUser.upsert({
     where: { username: adminUsername },
     update: {
@@ -228,48 +245,43 @@ async function main() {
   });
 
   for (const product of products) {
-    const created = await prisma.product.upsert({
+    const existing = await prisma.product.findFirst({
       where: {
-        brand_model: {
-          brand: product.brand,
-          model: product.model
-        }
+        brand: { equals: product.brand, mode: "insensitive" },
+        model: { equals: product.model, mode: "insensitive" }
       },
-      update: {
-        price: product.price,
-        ramGb: product.ramGb,
-        storageGb: product.storageGb,
-        storageType: product.storageType,
-        cpu: product.cpu,
-        gpu: product.gpu,
-        usageTags: product.usageTags,
-        description: product.description,
-        isActive: true
-      },
-      create: {
-        brand: product.brand,
-        model: product.model,
-        price: product.price,
-        ramGb: product.ramGb,
-        storageGb: product.storageGb,
-        storageType: product.storageType,
-        cpu: product.cpu,
-        gpu: product.gpu,
-        usageTags: product.usageTags,
-        description: product.description,
-        images: {
-          create: product.imageUrls.map((url, index) => ({
-            imageUrl: url,
-            sortOrder: index
-          }))
-        }
-      }
+      select: { id: true }
     });
 
-    await prisma.productImage.deleteMany({ where: { productId: created.id } });
+    const payload = {
+      price: product.price,
+      ramGb: product.ramGb,
+      storageGb: product.storageGb,
+      storageType: product.storageType,
+      cpu: product.cpu,
+      gpu: product.gpu,
+      usageTags: product.usageTags,
+      description: product.description,
+      isActive: true
+    };
+
+    const saved = existing
+      ? await prisma.product.update({
+          where: { id: existing.id },
+          data: payload
+        })
+      : await prisma.product.create({
+          data: {
+            brand: product.brand,
+            model: product.model,
+            ...payload
+          }
+        });
+
+    await prisma.productImage.deleteMany({ where: { productId: saved.id } });
     await prisma.productImage.createMany({
       data: product.imageUrls.map((url, index) => ({
-        productId: created.id,
+        productId: saved.id,
         imageUrl: url,
         sortOrder: index
       }))

@@ -810,12 +810,14 @@ tbody tr.row-busy {
 .login-grid {
   grid-template-columns: minmax(0, 420px);
   justify-content: center;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+  width: 100%;
 }
 
 .login-card {
   max-width: 420px;
   width: 100%;
+  margin: 0 auto;
 }
 
 .workspace-grid {
@@ -864,5 +866,9 @@ tbody tr.row-busy {
 
   .admin-header-actions .btn {
     width: 100%;
+  }
+
+  .login-grid {
+    margin-bottom: 14px;
   }
 }

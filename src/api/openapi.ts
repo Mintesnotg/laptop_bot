@@ -1,4 +1,4 @@
-import { BUDGET_KEYS, CLIENT_USAGE_VALUES, USAGE_KEYS } from "../shared/constants";
+import { BUDGET_KEYS, CLIENT_USAGE_VALUES } from "../shared/constants";
 
 export const openApiDocument = {
   openapi: "3.0.3",
@@ -35,11 +35,13 @@ export const openApiDocument = {
       },
       UsageTag: {
         type: "string",
-        enum: USAGE_KEYS
+        pattern: "^[A-Z0-9_]+$",
+        example: "GRAPHICS_DESIGN"
       },
       UsageInput: {
         type: "string",
-        enum: CLIENT_USAGE_VALUES
+        description: "Usage key or alias. Input is normalized to uppercase underscore keys.",
+        examples: CLIENT_USAGE_VALUES
       },
       RecommendationRequest: {
         type: "object",

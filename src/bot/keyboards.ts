@@ -1,6 +1,5 @@
 import { Markup } from "telegraf";
-import { USAGE_OPTIONS, type UsageKey } from "../shared/constants";
-import type { BudgetOptionDto, RamOptionDto, StorageOptionDto } from "./optionsClient";
+import type { BudgetOptionDto, RamOptionDto, StorageOptionDto, UsageTagOptionDto } from "./optionsClient";
 
 export function budgetKeyboard(budgets: BudgetOptionDto[]) {
   return Markup.inlineKeyboard([
@@ -8,12 +7,12 @@ export function budgetKeyboard(budgets: BudgetOptionDto[]) {
   ]);
 }
 
-export function usageKeyboard(selected: UsageKey[]) {
+export function usageKeyboard(selected: string[], usageOptions: UsageTagOptionDto[]) {
   const selectedSet = new Set(selected);
   return Markup.inlineKeyboard([
-    ...USAGE_OPTIONS.map((usage) => {
+    ...usageOptions.map((usage) => {
       const isSelected = selectedSet.has(usage.key);
-      const label = isSelected ? `✓ ${usage.label}` : `[ ] ${usage.label}`;
+      const label = isSelected ? `[x] ${usage.label}` : `[ ] ${usage.label}`;
       return [Markup.button.callback(label, `usage_toggle:${usage.key}`)];
     }),
     [Markup.button.callback("Done", "usage_done")],

@@ -1,17 +1,17 @@
 import { z } from "zod";
-import { normalizeUsageKey, USAGE_KEYS, type UsageKey } from "./constants";
+import { normalizeUsageKey } from "./constants";
 
 export const usageTagSchema = z.string().transform((value, ctx) => {
   const normalized = normalizeUsageKey(value);
   if (!normalized) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: `Invalid usage value. Allowed values: ${USAGE_KEYS.join(", ")} and UX/UI`
+      message: "Invalid usage value. Enter a non-empty usage key."
     });
     return z.NEVER;
   }
 
-  return normalized as UsageKey;
+  return normalized;
 });
 
 export const usageTagsSchema = z.array(usageTagSchema).min(1).transform((values) => Array.from(new Set(values)));

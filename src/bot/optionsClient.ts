@@ -3,6 +3,7 @@ import { env } from "../env";
 export type BudgetOptionDto = { key: string; label: string; min: number; max: number };
 export type RamOptionDto = { gb: number; label: string };
 export type StorageOptionDto = { gb: number; label: string };
+export type UsageTagOptionDto = { key: string; label: string };
 export type TelegramPostingConfigDto = {
   sellerPhones: string[];
   telegramUsername: string;
@@ -16,6 +17,7 @@ type OptionsSnapshot = {
   budgets: BudgetOptionDto[];
   ram: RamOptionDto[];
   storage: StorageOptionDto[];
+  usageTags: UsageTagOptionDto[];
   fetchedAtMs: number;
 };
 
@@ -40,16 +42,18 @@ export async function getOptionsSnapshot(force = false): Promise<OptionsSnapshot
     return cache;
   }
 
-  const [budgets, ram, storage] = await Promise.all([
+  const [budgets, ram, storage, usageTags] = await Promise.all([
     getJson<{ items: BudgetOptionDto[] }>("/api/options/budgets"),
     getJson<{ items: RamOptionDto[] }>("/api/options/ram"),
-    getJson<{ items: StorageOptionDto[] }>("/api/options/storage")
+    getJson<{ items: StorageOptionDto[] }>("/api/options/storage"),
+    getJson<{ items: UsageTagOptionDto[] }>("/api/options/usage-tags")
   ]);
 
   cache = {
     budgets: budgets.items ?? [],
     ram: ram.items ?? [],
     storage: storage.items ?? [],
+    usageTags: usageTags.items ?? [],
     fetchedAtMs: now
   };
 
