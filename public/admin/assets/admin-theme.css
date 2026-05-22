@@ -826,6 +826,16 @@ tbody tr.row-busy {
   grid-template-columns: 1fr;
 }
 
+.options-tables-stack {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.option-table-card {
+  width: 100%;
+}
+
 .header-whoami {
   margin: 0;
   white-space: nowrap;

@@ -147,6 +147,7 @@ function isMissingUsageTagOptionTableError(error: unknown) {
 }
 
 function withFeatureLinesFallback<T extends ProductCompatibilityRow>(product: T) {
+ debugger
   return {
     ...product,
     featureLines: Array.isArray(product.featureLines) ? product.featureLines : []
@@ -484,8 +485,10 @@ adminRouter.put("/options/telegram-posting", async (req, res) => {
 });
 
 adminRouter.get("/products", async (req, res) => {
+  debugger;
   const parsed = listProductsQuerySchema.safeParse(req.query);
   if (!parsed.success) {
+    debugger;
     return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
   }
 
@@ -535,9 +538,11 @@ adminRouter.get("/products", async (req, res) => {
         take: pageSize
       })
     ]);
-
+   console.log( "fallbackTotal", fallbackTotal);
+   
     total = fallbackTotal;
     items = fallbackItems.map((item) => ({
+    
       ...withFeatureLinesFallback(item as ProductCompatibilityRow),
       channelPublication: fallbackWithPublication
         ? (((item as ProductCompatibilityRow).channelPublication ?? null) as ProductChannelPublication | null)
@@ -551,6 +556,7 @@ adminRouter.get("/products", async (req, res) => {
     channelPublication: ((item as ProductCompatibilityRow).channelPublication ?? null) as ProductChannelPublication | null
   }));
 
+  
   return res.json({
     items: normalizedItems,
     pagination: {

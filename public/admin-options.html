@@ -64,8 +64,23 @@
     <button id="savePostingConfigBtn" type="button" class="btn btn-secondary">Save Posting Settings</button>
   </section>
 
-  <div class="grid">
-    <section class="card">
+  <div class="options-tables-stack">
+    <section class="card option-table-card">
+      <div class="card-header">
+        <h2>Usage Tags</h2>
+      </div>
+      <div class="table-wrap">
+        <table id="usageTable" class="display compact">
+          <thead><tr><th>Key</th><th>Label</th><th>#</th><th>Active</th><th>Action</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="inline"><input id="newUsageKey" placeholder="key" /><input id="newUsageLabel" placeholder="label" /></div>
+      <div class="inline"><input id="newUsageSort" type="number" placeholder="sortOrder" /><label class="chip"><input id="newUsageActive" type="checkbox" checked /> Active</label></div>
+      <button id="addUsageBtn" type="button">Add Usage Tag</button>
+    </section>
+
+    <section class="card option-table-card">
       <div class="card-header">
         <h2>Budget</h2>
       </div>
@@ -81,7 +96,7 @@
       <button id="addBudgetBtn" type="button">Add Budget</button>
     </section>
 
-    <section class="card">
+    <section class="card option-table-card">
       <div class="card-header">
         <h2>RAM</h2>
       </div>
@@ -96,7 +111,7 @@
       <button id="addRamBtn" type="button">Add RAM</button>
     </section>
 
-    <section class="card">
+    <section class="card option-table-card">
       <div class="card-header">
         <h2>Storage</h2>
       </div>
@@ -111,20 +126,6 @@
       <button id="addStorageBtn" type="button">Add Storage</button>
     </section>
 
-    <section class="card">
-      <div class="card-header">
-        <h2>Usage Tags</h2>
-      </div>
-      <div class="table-wrap">
-        <table id="usageTable" class="display compact">
-          <thead><tr><th>Key</th><th>Label</th><th>#</th><th>Active</th><th>Action</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="inline"><input id="newUsageKey" placeholder="key" /><input id="newUsageLabel" placeholder="label" /></div>
-      <div class="inline"><input id="newUsageSort" type="number" placeholder="sortOrder" /><label class="chip"><input id="newUsageActive" type="checkbox" checked /> Active</label></div>
-      <button id="addUsageBtn" type="button">Add Usage Tag</button>
-    </section>
   </div>
 
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>

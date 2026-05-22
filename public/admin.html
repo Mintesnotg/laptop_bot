@@ -718,13 +718,21 @@
       token: localStorage.getItem("adminToken") || "",
       user: null,
       page: 1,
-      pageSize: Number(localStorage.getItem("adminPageSize") || "10"),
+      pageSize: (() => {
+        const saved = Number(localStorage.getItem("adminPageSize") || "10");
+        return Number.isFinite(saved) && saved > 0 ? saved : 10;
+      })(),
       totalPages: 1,
       uploadedImageUrls: [],
       usageTagsMeta: [],
       ramOptions: [],
       storageOptions: []
     };
+    let productsDataTable = null;
+
+    function asArray(value) {
+      return Array.isArray(value) ? value : [];
+    }
 
     async function loadUsageTags() {
       const response = await fetch("/api/options/usage-tags", { cache: "no-store" });
@@ -744,16 +752,16 @@
       }
       const ramData = await ramResponse.json();
       const storageData = await storageResponse.json();
-      state.ramOptions = ramData.items || [];
-      state.storageOptions = storageData.items || [];
+      state.ramOptions = asArray(ramData.items);
+      state.storageOptions = asArray(storageData.items);
       renderMasterOptionSelects();
     }
 
     function renderMasterOptionSelects() {
-      const ramOptionsMarkup = state.ramOptions
+      const ramOptionsMarkup = asArray(state.ramOptions)
         .map((entry) => `<option value="${entry.gb}">${entry.label}</option>`)
         .join("");
-      const storageOptionsMarkup = state.storageOptions
+      const storageOptionsMarkup = asArray(state.storageOptions)
         .map((entry) => `<option value="${entry.gb}">${entry.label}</option>`)
         .join("");
 
@@ -768,7 +776,7 @@
       usageContainer.innerHTML = "";
 
       const data = await loadUsageTags();
-      const items = data.items || [];
+      const items = asArray(data.items);
       state.usageTagsMeta = items;
 
       items.forEach((tag) => {
@@ -789,7 +797,13 @@
     const whoami = document.getElementById("whoami");
     const openCreateProductBtn = document.getElementById("openCreateProductBtn");
     const pageSizeSelect = document.getElementById("pageSizeSelect");
-    pageSizeSelect.value = String(state.pageSize);
+    const initialPageSize = String(state.pageSize);
+    if (pageSizeSelect.querySelector(`option[value="${initialPageSize}"]`)) {
+      pageSizeSelect.value = initialPageSize;
+    } else {
+      state.pageSize = Number(pageSizeSelect.value || "10");
+      localStorage.setItem("adminPageSize", String(state.pageSize));
+    }
 
     function setStatus(el, message, type = "normal") {
       el.textContent = message;
@@ -852,6 +866,7 @@
     }
 
     async function callAdmin(path, options = {}) {
+      debugger;
       if (!state.token) {
         throw new Error("Please login first");
       }
@@ -870,6 +885,7 @@
       });
 
       if (!response.ok) {
+        debugger;
         let errMessage = `Request failed (${response.status})`;
         try {
           const payload = await response.json();
@@ -886,6 +902,21 @@
       }
 
       return response.json();
+    }
+
+    function destroyProductsDataTable() {
+      debugger;
+      if (!window.jQuery || !window.jQuery.fn?.DataTable) {
+        productsDataTable = null;
+        return;
+      }
+
+      const selector = "#productsTable";
+      if (window.jQuery.fn.DataTable.isDataTable(selector)) {
+        window.jQuery(selector).DataTable().destroy();
+      }
+
+      productsDataTable = null;
     }
 
     function normalizeManualImageUrls(rawText) {
@@ -1135,6 +1166,9 @@
     }
 
     async function loadProducts() {
+      debugger
+      destroyProductsDataTable();
+
       const searchText = document.getElementById("searchInput").value.trim();
       const params = new URLSearchParams({
         page: String(state.page),
@@ -1146,9 +1180,12 @@
       }
 
       const data = await callAdmin(`/products?${params.toString()}`);
-      const products = data.items || [];
-      state.totalPages = data.pagination?.totalPages || 1;
-      state.page = data.pagination?.page || state.page;
+
+
+      const products = asArray(data?.items ?? data?.data?.items);
+      const pagination = data?.pagination ?? data?.data?.pagination ?? {};
+      state.totalPages = Number(pagination.totalPages) > 0 ? Number(pagination.totalPages) : 1;
+      state.page = Number(pagination.page) > 0 ? Number(pagination.page) : state.page;
 
       const body = document.querySelector("#productsTable tbody");
       body.innerHTML = "";
@@ -1298,11 +1335,12 @@
     }
 
     function renderInsightList(element, items, emptyText) {
-      if (!items.length) {
+      const safeItems = asArray(items);
+      if (!safeItems.length) {
         element.innerHTML = `<li class="insight-empty">${emptyText}</li>`;
         return;
       }
-      element.innerHTML = items.map((item) => `<li>${item}</li>`).join("");
+      element.innerHTML = safeItems.map((item) => `<li>${item}</li>`).join("");
     }
 
     function renderStatCard({ iconClass, icon, label, value, sub }) {
@@ -1326,8 +1364,9 @@
 
       do {
         const data = await callAdmin(`/products?page=${page}&pageSize=${pageSize}`);
-        items.push(...(data.items || []));
-        totalPages = data.pagination?.totalPages || 1;
+        items.push(...asArray(data?.items ?? data?.data?.items));
+        const pagination = data?.pagination ?? data?.data?.pagination ?? {};
+        totalPages = Number(pagination.totalPages) > 0 ? Number(pagination.totalPages) : 1;
         page += 1;
       } while (page <= totalPages);
 
@@ -1375,14 +1414,18 @@
         fetchAllProducts()
       ]);
 
-      const totalRequests = (analytics.popularUsage || []).reduce(
+      const popularUsage = asArray(analytics.popularUsage);
+      const topBudgets = asArray(analytics.topBudgets);
+      const topProducts = asArray(analytics.topProducts);
+
+      const totalRequests = popularUsage.reduce(
         (sum, entry) => sum + (entry._count?._all || 0),
         0
       );
-      const uniqueUsage = (analytics.popularUsage || []).length;
-      const topUsage = analytics.popularUsage?.[0];
-      const topBudget = analytics.topBudgets?.[0];
-      const topProduct = analytics.topProducts?.[0];
+      const uniqueUsage = popularUsage.length;
+      const topUsage = popularUsage[0];
+      const topBudget = topBudgets[0];
+      const topProduct = topProducts[0];
       const publishMetrics = computePublishMetrics(products);
       const channelConfigured = Boolean((channel.channelTarget || "").trim());
       const channelStatus = channelConfigured
@@ -1452,19 +1495,19 @@
 
       renderInsightList(
         document.getElementById("popularUsage"),
-        (analytics.popularUsage || []).map((entry) => `${entry.usageTag}: ${entry._count._all}`),
+        popularUsage.map((entry) => `${entry.usageTag}: ${entry._count._all}`),
         "No usage analytics yet."
       );
       renderInsightList(
         document.getElementById("topBudgets"),
-        (analytics.topBudgets || []).map(
+        topBudgets.map(
           (entry) => `${entry.budgetMin.toLocaleString()}-${entry.budgetMax.toLocaleString()} ETB: ${entry._count._all}`
         ),
         "No budget analytics yet."
       );
       renderInsightList(
         document.getElementById("topProducts"),
-        (analytics.topProducts || []).map((entry) => `${entry.brand} ${entry.model}: ${entry.count}`),
+        topProducts.map((entry) => `${entry.brand} ${entry.model}: ${entry.count}`),
         "No product recommendation analytics yet."
       );
 
@@ -1481,7 +1524,7 @@
     }
 
     function initProductsDataTable() {
-      initDataTable("#productsTable", {
+      productsDataTable = initDataTable("#productsTable", {
         paging: false,
         info: false,
         searching: true,
@@ -1643,7 +1686,8 @@
     });
 
     pageSizeSelect.addEventListener("change", async () => {
-      state.pageSize = Number(pageSizeSelect.value);
+      const nextPageSize = Number(pageSizeSelect.value);
+      state.pageSize = Number.isFinite(nextPageSize) && nextPageSize > 0 ? nextPageSize : 10;
       localStorage.setItem("adminPageSize", String(state.pageSize));
       state.page = 1;
 

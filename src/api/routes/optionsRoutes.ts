@@ -2,7 +2,7 @@ import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../prisma";
 import { getTelegramPostingConfig } from "../../services/telegramPostingConfig";
-import { BUDGET_RANGES, DEFAULT_USAGE_OPTIONS, RAM_OPTIONS, STORAGE_OPTIONS } from "../../shared/constants";
+import { DEFAULT_USAGE_OPTIONS, RAM_OPTIONS, STORAGE_OPTIONS } from "../../shared/constants";
 
 export const optionsRouter = Router();
 
@@ -13,7 +13,9 @@ optionsRouter.get("/budgets", async (_req, res) => {
   });
 
   if (rows.length === 0) {
-    return res.json({ items: BUDGET_RANGES });
+    return res.status(503).json({
+      message: "Budget options are not configured. Please add at least one active budget range in admin options."
+    });
   }
 
   return res.json({

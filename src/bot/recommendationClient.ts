@@ -17,12 +17,15 @@ type RecommendationPayload = {
 
 type RecommendationApiResponse = {
   filters: {
+    budgetKey: string;
     budget: string;
+    budgetMin: number;
+    budgetMax: number;
     usage: string[];
     ramGb: number;
     storageGb: number;
   };
-  matchMode?: "strict" | "relaxed";
+  matchMode?: "strict" | "relaxed" | "closest";
   hintMessage?: string;
   items: Array<{
     id: string;

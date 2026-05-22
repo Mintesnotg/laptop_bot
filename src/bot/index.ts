@@ -5,7 +5,7 @@ import { Markup, Telegraf, session } from "telegraf";
 import { env } from "../env";
 import { buildTelegramListingHtml, validateTelegramListingContent } from "../services/telegramMessageFormatter";
 import { sendTelegramRichPost } from "../services/telegramMediaDelivery";
-import { findBudgetRange, normalizeUsageKey, usageLabelFromKey } from "../shared/constants";
+import { normalizeUsageKey, usageLabelFromKey } from "../shared/constants";
 import { budgetKeyboard, ramKeyboard, resultsKeyboard, storageKeyboard, usageKeyboard } from "./keyboards";
 import { getOptionsSnapshot, getTelegramPostingConfigSnapshot } from "./optionsClient";
 import { fetchRecommendations } from "./recommendationClient";
@@ -67,12 +67,28 @@ async function sendOrEdit(ctx: BotContext, text: string, extra?: any) {
 
 async function askBudget(ctx: BotContext) {
   ctx.session.step = "budget";
-  const options = await getOptionsSnapshot();
-  await sendOrEdit(
-    ctx,
-    "Welcome. What is your budget?",
-    budgetKeyboard(options.budgets)
-  );
+  try {
+    const options = await getOptionsSnapshot();
+    if (!options.budgets.length) {
+      await sendOrEdit(
+        ctx,
+        "Budget options are not configured yet. Please ask the admin to add active budget ranges in Admin Options."
+      );
+      return;
+    }
+
+    await sendOrEdit(
+      ctx,
+      "Welcome. What is your budget?",
+      budgetKeyboard(options.budgets)
+    );
+  } catch (error) {
+    console.error("[bot][budget-options-error]", error);
+    await sendOrEdit(
+      ctx,
+      "Budget options are not configured yet. Please ask the admin to add active budget ranges in Admin Options."
+    );
+  }
 }
 
 async function askUsage(ctx: BotContext) {
@@ -99,11 +115,13 @@ async function askStorage(ctx: BotContext) {
   await sendOrEdit(ctx, "Select minimum SSD/Storage.", storageKeyboard(options.storage));
 }
 
-async function savePreference(ctx: BotContext) {
-  const budget = findBudgetRange(ctx.session.budgetKey ?? "");
+async function savePreference(
+  ctx: BotContext,
+  budget: { min: number; max: number }
+) {
   const primaryUsage = normalizeUsageKey(ctx.session.usageSelections[0] ?? "DAILY_BROWSING") ?? "DAILY_BROWSING";
 
-  if (!budget || !ctx.from || !primaryUsage || !ctx.session.ramGb || !ctx.session.storageGb) {
+  if (!ctx.from || !primaryUsage || !ctx.session.ramGb || !ctx.session.storageGb) {
     return;
   }
 
@@ -150,11 +168,15 @@ async function showRecommendations(ctx: BotContext) {
         storageGb: ctx.session.storageGb,
         limit: 5
       }),
-      getTelegramPostingConfigSnapshot(),
-      savePreference(ctx).catch((error) => {
-        console.warn("[bot][preference-save-failed]", error);
-      })
+      getTelegramPostingConfigSnapshot()
     ]);
+
+    await savePreference(ctx, {
+      min: result.filters.budgetMin,
+      max: result.filters.budgetMax
+    }).catch((error) => {
+      console.warn("[bot][preference-save-failed]", error);
+    });
     if (!postingConfig.fullAddress.trim()) {
       console.warn(`[telegram][config-warning] flow=bot-recommendation requestId=${requestId} field=fullAddress`);
     }

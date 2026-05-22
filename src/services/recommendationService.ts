@@ -1,5 +1,6 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
-import { findBudgetRange, normalizeUsageKey, usageLabelFromKey, type BudgetRange } from "../shared/constants";
+import { normalizeUsageKey, usageLabelFromKey } from "../shared/constants";
 import { RecommendationRequestInput } from "../shared/contracts";
 
 type RankedProduct = {
@@ -17,9 +18,17 @@ type RankedProduct = {
   description: string | null;
   images: { imageUrl: string }[];
   score: number;
-  source: "strict" | "relaxed";
+  source: "strict" | "closest";
   usageOverlapCount: number;
+  hasExactRamStorageMatch: boolean;
   exactPreference: boolean;
+};
+
+type ResolvedBudgetRange = {
+  key: string;
+  label: string;
+  min: number;
+  max: number;
 };
 
 type ScoredBand = {
@@ -32,21 +41,71 @@ function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value));
 }
 
-async function resolveBudgetRange(budgetKey: string): Promise<BudgetRange | null> {
-  const dbBudget = await prisma.budgetOption.findFirst({
-    where: { key: budgetKey, isActive: true }
-  });
+function budgetMidpoint(budget: { min: number; max: number }) {
+  return (budget.min + budget.max) / 2;
+}
 
-  if (dbBudget) {
-    return {
-      key: dbBudget.key,
-      label: dbBudget.label,
-      min: dbBudget.min,
-      max: dbBudget.max
-    };
+function distanceFromBudgetRange(price: number, budgetMin: number, budgetMax: number) {
+  if (price < budgetMin) {
+    return budgetMin - price;
+  }
+  if (price > budgetMax) {
+    return price - budgetMax;
+  }
+  return 0;
+}
+
+function pickMedianBudget(budgets: ResolvedBudgetRange[]) {
+  const ordered = [...budgets].sort((a, b) => a.min - b.min || a.max - b.max || a.key.localeCompare(b.key));
+  const medianIndex = Math.floor(ordered.length / 2);
+  return ordered[medianIndex];
+}
+
+function pickNearestBudgetByMidpoint(budgets: ResolvedBudgetRange[], target: { min: number; max: number }) {
+  const targetMidpoint = budgetMidpoint(target);
+  return [...budgets].sort(
+    (a, b) =>
+      Math.abs(budgetMidpoint(a) - targetMidpoint) - Math.abs(budgetMidpoint(b) - targetMidpoint) ||
+      a.min - b.min ||
+      a.max - b.max ||
+      a.key.localeCompare(b.key)
+  )[0];
+}
+
+async function resolveBudgetRange(budgetKey: string): Promise<ResolvedBudgetRange> {
+  const [activeBudgets, selectedAnyBudget] = await Promise.all([
+    prisma.budgetOption.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { min: "asc" }],
+      select: { key: true, label: true, min: true, max: true }
+    }),
+    prisma.budgetOption.findUnique({
+      where: { key: budgetKey },
+      select: { key: true, label: true, min: true, max: true, isActive: true }
+    })
+  ]);
+
+  const normalizedActiveBudgets: ResolvedBudgetRange[] = activeBudgets.map((row) => ({
+    key: row.key,
+    label: row.label,
+    min: row.min,
+    max: row.max
+  }));
+
+  if (normalizedActiveBudgets.length === 0) {
+    throw new Error("Budget options are not configured. Please add at least one active budget range in admin options.");
   }
 
-  return findBudgetRange(budgetKey) ?? null;
+  const activeSelection = normalizedActiveBudgets.find((budget) => budget.key === budgetKey);
+  if (activeSelection) {
+    return activeSelection;
+  }
+
+  if (selectedAnyBudget) {
+    return pickNearestBudgetByMidpoint(normalizedActiveBudgets, selectedAnyBudget);
+  }
+
+  return pickMedianBudget(normalizedActiveBudgets);
 }
 
 async function loadResourceOptionValues() {
@@ -176,15 +235,61 @@ function dedupeProducts(items: RankedProduct[]) {
 }
 
 function buildNoResultsHint(filters: RecommendationRequestInput) {
-  const loweredRam = Math.max(4, filters.ramGb - 4);
-  const loweredStorage = Math.max(128, Math.floor(filters.storageGb * 0.75));
   return [
     "No close matches found for your current filters.",
-    "At least one selected usage tag must overlap with a product tag.",
-    `Try lowering RAM from ${filters.ramGb}GB to ${loweredRam}GB.`,
-    `Try lowering storage from ${filters.storageGb}GB to around ${loweredStorage}GB.`,
+    "Matches are returned when at least one usage tag overlaps or when RAM and storage are both exact matches.",
+    `Try lowering RAM .`,
+    `Try lowering storage .`,
     "Try moving to the next budget range."
   ].join(" ");
+}
+
+function rankProducts(
+  products: Array<{
+    id: string;
+    brand: string;
+    model: string;
+    price: number;
+    ramGb: number;
+    storageGb: number;
+    storageType: string;
+    cpu: string;
+    gpu: string | null;
+    usageTags: string[];
+    featureLines: string[];
+    description: string | null;
+    images: { imageUrl: string }[];
+  }>,
+  source: RankedProduct["source"],
+  params: {
+    budget: ResolvedBudgetRange;
+    requestedUsageTags: string[];
+    requestedRamGb: number;
+    requestedStorageGb: number;
+    ramOptions: number[];
+    storageOptions: number[];
+  }
+) {
+  return products.map((product) => {
+    const scored = scoreProduct({
+      product,
+      budget: params.budget,
+      requestedUsageTags: params.requestedUsageTags,
+      requestedRamGb: params.requestedRamGb,
+      requestedStorageGb: params.requestedStorageGb,
+      ramOptions: params.ramOptions,
+      storageOptions: params.storageOptions
+    });
+
+    return {
+      ...product,
+      score: scored.score,
+      source,
+      usageOverlapCount: scored.usageOverlapCount,
+      hasExactRamStorageMatch: scored.hasExactRamStorageMatch,
+      exactPreference: scored.exactPreference
+    } satisfies RankedProduct;
+  });
 }
 
 function normalizeRequestedUsage(rawUsage: string[]) {
@@ -214,11 +319,11 @@ function scoreProduct(params: {
   const storageBand = scoreResourceMatch(product.storageGb, requestedStorageGb, storageOptions);
   const priceScore = scorePriceFit(product.price, budget.min, budget.max);
   const cpuScore = parseCpuTier(product.cpu);
+  const hasExactRamStorageMatch = ramBand.isExact && storageBand.isExact;
 
   const exactPreference =
     usageMatch.allRequestedMatched &&
-    ramBand.isExact &&
-    storageBand.isExact &&
+    hasExactRamStorageMatch &&
     product.price >= budget.min &&
     product.price <= budget.max;
 
@@ -233,21 +338,44 @@ function scoreProduct(params: {
   return {
     score: Number((clamp(weightedScore, 0, 1.08) * 100).toFixed(2)),
     usageOverlapCount: usageMatch.overlapCount,
+    hasExactRamStorageMatch,
     exactPreference,
     ramBand,
     storageBand
   };
 }
 
+function buildUsageOrExactResourceWhere(
+  requestedUsage: string[],
+  requestedRamGb: number,
+  requestedStorageGb: number
+): Prisma.ProductWhereInput {
+  const usageClause: Prisma.ProductWhereInput | null =
+    requestedUsage.length > 0 ? { usageTags: { hasSome: requestedUsage } } : null;
+
+  const exactResourceClause: Prisma.ProductWhereInput = {
+    ramGb: requestedRamGb,
+    storageGb: requestedStorageGb
+  };
+
+  return usageClause
+    ? {
+        OR: [usageClause, exactResourceClause]
+      }
+    : exactResourceClause;
+}
+
 export async function recommendLaptops(filters: RecommendationRequestInput) {
   const budget = await resolveBudgetRange(filters.budgetKey);
-  if (!budget) {
-    throw new Error("Invalid budget range selected");
-  }
 
   const requestedUsage = normalizeRequestedUsage(filters.usage);
   const usageLabels = requestedUsage.map((usage) => usageLabelFromKey(usage));
   const { ram: ramOptions, storage: storageOptions } = await loadResourceOptionValues();
+  const usageOrExactResourceWhere = buildUsageOrExactResourceWhere(
+    requestedUsage,
+    filters.ramGb,
+    filters.storageGb
+  );
 
   let userId: number | null = null;
   if (filters.telegramUserId) {
@@ -263,7 +391,7 @@ export async function recommendLaptops(filters: RecommendationRequestInput) {
     where: {
       isActive: true,
       price: { gte: budget.min, lte: budget.max },
-      usageTags: { hasSome: requestedUsage }
+      ...usageOrExactResourceWhere
     },
     include: {
       images: {
@@ -274,71 +402,20 @@ export async function recommendLaptops(filters: RecommendationRequestInput) {
     take: 250
   });
 
-  const relaxedProducts =
-    strictProducts.length >= filters.limit
-      ? []
-      : await prisma.product.findMany({
-          where: {
-            isActive: true,
-            price: {
-              gte: Math.max(0, Math.floor(budget.min * 0.75)),
-              lte: Math.ceil(budget.max * 1.35)
-            },
-            usageTags: { hasSome: requestedUsage }
-          },
-          include: {
-            images: {
-              select: { imageUrl: true },
-              orderBy: { sortOrder: "asc" }
-            }
-          },
-          take: 250
-        });
-
-  const rankedStrict: RankedProduct[] = strictProducts.map((product) => {
-    const scored = scoreProduct({
-      product,
-      budget,
-      requestedUsageTags: requestedUsage,
-      requestedRamGb: filters.ramGb,
-      requestedStorageGb: filters.storageGb,
-      ramOptions,
-      storageOptions
-    });
-
-    return {
-      ...product,
-      score: scored.score,
-      source: "strict",
-      usageOverlapCount: scored.usageOverlapCount,
-      exactPreference: scored.exactPreference
-    };
+  const rankedStrict: RankedProduct[] = rankProducts(strictProducts, "strict", {
+    budget,
+    requestedUsageTags: requestedUsage,
+    requestedRamGb: filters.ramGb,
+    requestedStorageGb: filters.storageGb,
+    ramOptions,
+    storageOptions
   });
 
-  const rankedRelaxed: RankedProduct[] = relaxedProducts.map((product) => {
-    const scored = scoreProduct({
-      product,
-      budget,
-      requestedUsageTags: requestedUsage,
-      requestedRamGb: filters.ramGb,
-      requestedStorageGb: filters.storageGb,
-      ramOptions,
-      storageOptions
-    });
-
-    return {
-      ...product,
-      score: scored.score,
-      source: "relaxed",
-      usageOverlapCount: scored.usageOverlapCount,
-      exactPreference: scored.exactPreference
-    };
-  });
-
-  const ranked = dedupeProducts([...rankedStrict, ...rankedRelaxed])
-    .filter((item) => item.usageOverlapCount > 0)
+  let ranked = dedupeProducts(rankedStrict)
+    .filter((item) => item.usageOverlapCount > 0 || item.hasExactRamStorageMatch)
     .sort(
       (a, b) =>
+        Number(b.hasExactRamStorageMatch) - Number(a.hasExactRamStorageMatch) ||
         b.score - a.score ||
         Number(b.exactPreference) - Number(a.exactPreference) ||
         b.usageOverlapCount - a.usageOverlapCount ||
@@ -346,8 +423,49 @@ export async function recommendLaptops(filters: RecommendationRequestInput) {
         a.id.localeCompare(b.id)
     );
 
+  let matchMode: "strict" | "closest" = "strict";
+
+  if (ranked.length === 0) {
+    const closestCandidates = await prisma.product.findMany({
+      where: {
+        isActive: true,
+        ...usageOrExactResourceWhere
+      },
+      include: {
+        images: {
+          select: { imageUrl: true },
+          orderBy: { sortOrder: "asc" }
+        }
+      },
+      take: 250
+    });
+
+    const rankedClosest = rankProducts(closestCandidates, "closest", {
+      budget,
+      requestedUsageTags: requestedUsage,
+      requestedRamGb: filters.ramGb,
+      requestedStorageGb: filters.storageGb,
+      ramOptions,
+      storageOptions
+    });
+
+    ranked = dedupeProducts(rankedClosest)
+      .filter((item) => item.usageOverlapCount > 0 || item.hasExactRamStorageMatch)
+      .sort(
+        (a, b) =>
+          distanceFromBudgetRange(a.price, budget.min, budget.max) -
+            distanceFromBudgetRange(b.price, budget.min, budget.max) ||
+          Number(b.hasExactRamStorageMatch) - Number(a.hasExactRamStorageMatch) ||
+          b.score - a.score ||
+          b.usageOverlapCount - a.usageOverlapCount ||
+          a.price - b.price ||
+          a.id.localeCompare(b.id)
+      );
+
+    matchMode = "closest";
+  }
+
   const topResults = ranked.slice(0, filters.limit);
-  const matchMode = topResults.some((item) => item.source === "relaxed") ? "relaxed" : "strict";
   const primaryUsage = requestedUsage[0] ?? "DAILY_BROWSING";
 
   try {
@@ -382,8 +500,10 @@ export async function recommendLaptops(filters: RecommendationRequestInput) {
         userId,
         action: "recommendation_requested",
         payload: {
-          budgetKey: filters.budgetKey,
+          budgetKey: budget.key,
           budgetLabel: budget.label,
+          budgetMin: budget.min,
+          budgetMax: budget.max,
           usageLabel: usageLabels[0] ?? "-",
           usageLabels,
           usageKeys: requestedUsage,
@@ -402,7 +522,10 @@ export async function recommendLaptops(filters: RecommendationRequestInput) {
 
   return {
     filters: {
+      budgetKey: budget.key,
       budget: budget.label,
+      budgetMin: budget.min,
+      budgetMax: budget.max,
       usage: usageLabels,
       ramGb: filters.ramGb,
       storageGb: filters.storageGb

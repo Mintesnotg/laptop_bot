@@ -185,10 +185,15 @@
     if (!$table.length) {
       return null;
     }
-    if (global.jQuery.fn.DataTable.isDataTable(selector)) {
-      $table.DataTable().destroy();
+    try {
+      if (global.jQuery.fn.DataTable.isDataTable(selector)) {
+        $table.DataTable().destroy();
+      }
+      return $table.DataTable(options);
+    } catch (error) {
+      console.error("DataTable initialization failed", error);
+      return null;
     }
-    return $table.DataTable(options);
   }
 
   global.AdminUI = {

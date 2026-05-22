@@ -1,4 +1,4 @@
-import { BUDGET_KEYS, CLIENT_USAGE_VALUES } from "../shared/constants";
+import { CLIENT_USAGE_VALUES } from "../shared/constants";
 
 export const openApiDocument = {
   openapi: "3.0.3",
@@ -31,7 +31,7 @@ export const openApiDocument = {
     schemas: {
       BudgetKey: {
         type: "string",
-        enum: BUDGET_KEYS
+        description: "Dynamic budget key from active BudgetOption rows (/api/options/budgets)."
       },
       UsageTag: {
         type: "string",
@@ -70,7 +70,10 @@ export const openApiDocument = {
           filters: {
             type: "object",
             properties: {
+              budgetKey: { type: "string" },
               budget: { type: "string" },
+              budgetMin: { type: "integer" },
+              budgetMax: { type: "integer" },
               usage: {
                 type: "array",
                 items: { type: "string" }
@@ -79,7 +82,7 @@ export const openApiDocument = {
               storageGb: { type: "integer" }
             }
           },
-          matchMode: { type: "string", enum: ["strict", "relaxed"] },
+          matchMode: { type: "string", enum: ["strict", "relaxed", "closest"] },
           hintMessage: { type: "string" },
           items: {
             type: "array",
