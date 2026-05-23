@@ -38,6 +38,8 @@ type ScoredBand = {
 };
 
 function clamp(value: number, min = 0, max = 1) {
+  
+  
   return Math.min(max, Math.max(min, value));
 }
 
@@ -177,13 +179,18 @@ function scorePriceFit(price: number, budgetMin: number, budgetMax: number) {
   const range = Math.max(1, budgetMax - budgetMin);
   const midpoint = (budgetMin + budgetMax) / 2;
 
-  if (price >= budgetMin && price <= budgetMax) {
+  if (midpoint >= budgetMin && midpoint <= budgetMax) {
+
     const normalizedDistance = Math.abs(price - midpoint) / Math.max(1, range / 2);
-    return clamp(1 - normalizedDistance * 0.35, 0.65, 1);
+     var value = clamp(1 - normalizedDistance * 0.35, 0.65, 1);
+    return value;
   }
 
   const distanceOutside = price < budgetMin ? budgetMin - price : price - budgetMax;
-  return clamp(0.64 - distanceOutside / (range * 1.2), 0, 0.64);
+  
+  var value = clamp(0.64 - distanceOutside / (range * 1.2), 0, 0.64);
+  
+  return value;
 }
 
 function parseCpuTier(cpu: string) {
@@ -207,7 +214,7 @@ function parseCpuTier(cpu: string) {
   return clamp(tier + generationBonus, 0, 1);
 }
 
-function computeUsageOverlap(productUsageTags: string[], requestedUsageTags: string[]) {
+function  computeUsageOverlap(productUsageTags: string[], requestedUsageTags: string[]) {
   const requestedSet = new Set(requestedUsageTags);
   const overlapCount = productUsageTags.filter((tag) => requestedSet.has(tag)).length;
   const overlapRatio = requestedUsageTags.length > 0 ? overlapCount / requestedUsageTags.length : 0;
@@ -321,11 +328,12 @@ function scoreProduct(params: {
   const cpuScore = parseCpuTier(product.cpu);
   const hasExactRamStorageMatch = ramBand.isExact && storageBand.isExact;
 
+
+  //const midpoint = (budget.min + budget.max) / 2;
+
   const exactPreference =
     usageMatch.allRequestedMatched &&
-    hasExactRamStorageMatch &&
-    product.price >= budget.min &&
-    product.price <= budget.max;
+    hasExactRamStorageMatch;
 
   const weightedScore =
     usageMatch.overlapRatio * 0.4 +
@@ -366,6 +374,9 @@ function buildUsageOrExactResourceWhere(
 }
 
 export async function recommendLaptops(filters: RecommendationRequestInput) {
+  
+  
+  
   const budget = await resolveBudgetRange(filters.budgetKey);
 
   const requestedUsage = normalizeRequestedUsage(filters.usage);
@@ -481,7 +492,9 @@ export async function recommendLaptops(filters: RecommendationRequestInput) {
     });
 
     if (topResults.length > 0) {
+
       await prisma.recommendationResult.createMany({
+        
         data: topResults.map((product, index) => ({
           requestId: request.id,
           productId: product.id,
@@ -491,6 +504,7 @@ export async function recommendLaptops(filters: RecommendationRequestInput) {
       });
     }
   } catch (error) {
+
     console.warn("[recommendations] audit persistence failed", error);
   }
 
