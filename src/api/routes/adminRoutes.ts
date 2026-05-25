@@ -76,6 +76,13 @@ const usageTagOptionCreateSchema = z.object({
 });
 
 const usageTagOptionUpdateSchema = usageTagOptionCreateSchema.partial();
+const brandOptionCreateSchema = z.object({
+  name: z.string().trim().min(1),
+  description: z.string().trim().max(500).default(""),
+  sortOrder: z.number().int().default(0),
+  isActive: z.boolean().default(true)
+});
+const brandOptionUpdateSchema = brandOptionCreateSchema.partial();
 const channelOptionUpdateSchema = z.object({
   channelTarget: z.string().trim().max(255)
 });
@@ -89,11 +96,14 @@ const telegramPostingOptionUpdateSchema = z.object({
 });
 
 const TELEGRAM_CHANNEL_SETTING_KEY = "telegramChannelTarget";
+const UNKNOWN_BRAND_NAME = "Unknown";
 const CHANNEL_PUBLICATION_TABLE_MISSING_MESSAGE =
   "Telegram publication tracking is not initialized. Run Prisma migrations to create ProductChannelPublication and retry.";
 
 const DUPLICATE_ACTIVE_PRODUCT_MESSAGE = (brand: string, model: string) =>
   `Product "${brand} ${model}" already exists. Please edit the existing product instead.`;
+const BRAND_NOT_ACTIVE_MESSAGE = (brand: string) =>
+  `Brand "${brand}" is not available. Please select an active brand from options.`;
 
 type ProductWithImagesAndChannelPublication = Product & {
   images: ProductImage[];
@@ -144,6 +154,60 @@ function isMissingUsageTagOptionTableError(error: unknown) {
 
   const message = error.message.toLowerCase();
   return message.includes("usagetagoption");
+}
+
+function isMissingBrandOptionTableError(error: unknown) {
+  
+  
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2021") {
+    return false;
+  }
+
+  const tableName = typeof error.meta?.table === "string" ? error.meta.table : "";
+  if (tableName.includes("BrandOption")) {
+    return true;
+  }
+
+  return error.message.toLowerCase().includes("brandoption");
+}
+
+function normalizeComparableText(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function hasCaseInsensitiveDifference(a: string, b: string) {
+  return normalizeComparableText(a) !== normalizeComparableText(b);
+}
+
+async function ensureActiveBrandExists(brandName: string) {
+  try {
+    const brand = await prisma.brandOption.findFirst({
+      where: {
+        isActive: true,
+        name: { equals: brandName, mode: "insensitive" }
+      },
+      select: { id: true }
+    });
+
+    if (!brand) {
+      return {
+        ok: false as const,
+        status: 400,
+        message: BRAND_NOT_ACTIVE_MESSAGE(brandName)
+      };
+    }
+
+    return { ok: true as const };
+  } catch (error) {
+    if (isMissingBrandOptionTableError(error)) {
+      return {
+        ok: false as const,
+        status: 503,
+        message: "Brand options table is not initialized. Run migrations first."
+      };
+    }
+    throw error;
+  }
 }
 
 function withFeatureLinesFallback<T extends ProductCompatibilityRow>(product: T) {
@@ -574,6 +638,11 @@ adminRouter.post("/products", async (req, res) => {
     return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
   }
 
+  const activeBrandCheck = await ensureActiveBrandExists(parsed.data.brand);
+  if (!activeBrandCheck.ok) {
+    return res.status(activeBrandCheck.status).json({ message: activeBrandCheck.message });
+  }
+
   const duplicate = await prisma.product.findFirst({
     where: {
       isActive: true,
@@ -735,6 +804,22 @@ adminRouter.put("/products/:id", async (req, res) => {
 
   const productId = req.params.id;
 
+  const currentProduct = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { brand: true, model: true }
+  });
+
+  if (!currentProduct) {
+    return res.status(404).json({ message: "Product not found" });
+  }
+
+  if (parsed.data.brand && hasCaseInsensitiveDifference(parsed.data.brand, currentProduct.brand)) {
+    const activeBrandCheck = await ensureActiveBrandExists(parsed.data.brand);
+    if (!activeBrandCheck.ok) {
+      return res.status(activeBrandCheck.status).json({ message: activeBrandCheck.message });
+    }
+  }
+
   let updated;
   const baseUpdateData = {
     brand: parsed.data.brand,
@@ -862,9 +947,13 @@ adminRouter.patch("/products/:id/status", async (req, res) => {
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      
+      console.log("DUPLICATE_ACTIVE_PRODUCT_MESSAGE ....", error);
+
       return res.status(409).json({
         message: DUPLICATE_ACTIVE_PRODUCT_MESSAGE(before.brand, before.model)
       });
+    
     }
 
     throw error;
@@ -941,6 +1030,245 @@ adminRouter.get("/analytics", async (_req, res) => {
         model: productMap.get(entry.productId)?.model ?? "Unknown"
       }))
   });
+});
+
+adminRouter.get("/options/brands", async (_req, res) => {
+  try {
+    const items = await prisma.brandOption.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
+    });
+    return res.json({ items });
+  } catch (error) {
+    console.log("isMissingBrandOptionTableError ....", error);
+    
+    if (isMissingBrandOptionTableError(error)) {
+      return res.status(503).json({ message: "Brand options table is not initialized. Run migrations first." });
+    }
+    throw error;
+  }
+});
+
+adminRouter.post("/options/brands", async (req, res) => {
+  const parsed = brandOptionCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
+  }
+
+  try {
+    const existingInsensitive = await prisma.brandOption.findFirst({
+      where: {
+        name: { equals: parsed.data.name, mode: "insensitive" }
+      },
+      select: { id: true, name: true }
+    });
+
+    if (existingInsensitive) {
+      return res.status(409).json({ message: `Brand "${existingInsensitive.name}" already exists.` });
+    }
+
+    const created = await prisma.brandOption.create({
+      data: {
+        name: parsed.data.name,
+        description: parsed.data.description,
+        sortOrder: parsed.data.sortOrder,
+        isActive: parsed.data.isActive
+      }
+    });
+    return res.status(201).json(created);
+  } catch (error) {
+    if (isMissingBrandOptionTableError(error)) {
+      return res.status(503).json({ message: "Brand options table is not initialized. Run migrations first." });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return res.status(409).json({ message: `Brand "${parsed.data.name}" already exists.` });
+    }
+    throw error;
+  }
+});
+
+adminRouter.put("/options/brands/:id", async (req, res) => {
+  const parsed = brandOptionUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
+  }
+
+  try {
+    if (parsed.data.name !== undefined) {
+      const duplicateInsensitive = await prisma.brandOption.findFirst({
+        where: {
+          id: { not: req.params.id },
+          name: { equals: parsed.data.name, mode: "insensitive" }
+        },
+        select: { id: true, name: true }
+      });
+
+      if (duplicateInsensitive) {
+        return res.status(409).json({ message: `Brand "${duplicateInsensitive.name}" already exists.` });
+      }
+    }
+
+    const updated = await prisma.brandOption.update({
+      where: { id: req.params.id },
+      data: {
+        name: parsed.data.name,
+        description: parsed.data.description,
+        sortOrder: parsed.data.sortOrder,
+        isActive: parsed.data.isActive
+      }
+    });
+    return res.json(updated);
+  } catch (error) {
+    if (isMissingBrandOptionTableError(error)) {
+      return res.status(503).json({ message: "Brand options table is not initialized. Run migrations first." });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      return res.status(404).json({ message: "Brand not found." });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return res.status(409).json({ message: `Brand "${parsed.data.name}" already exists.` });
+    }
+    throw error;
+  }
+});
+
+adminRouter.delete("/options/brands/:id", async (req, res) => {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const brand = await tx.brandOption.findUnique({
+        where: { id: req.params.id },
+        select: { id: true, name: true }
+      });
+
+      if (!brand) {
+        return { status: 404 as const };
+      }
+
+      if (!hasCaseInsensitiveDifference(brand.name, UNKNOWN_BRAND_NAME)) {
+        return { status: 400 as const, message: `"${UNKNOWN_BRAND_NAME}" is reserved and cannot be deleted.` };
+      }
+
+      const exactUnknownBrandOption = await tx.brandOption.findUnique({
+        where: { name: UNKNOWN_BRAND_NAME },
+        select: { id: true }
+      });
+      const variantUnknownBrandOption = !exactUnknownBrandOption
+        ? await tx.brandOption.findFirst({
+            where: { name: { equals: UNKNOWN_BRAND_NAME, mode: "insensitive" } },
+            select: { id: true }
+          })
+        : null;
+
+      if (exactUnknownBrandOption || variantUnknownBrandOption) {
+        await tx.brandOption.update({
+          where: { id: exactUnknownBrandOption?.id ?? variantUnknownBrandOption!.id },
+          data: {
+            name: UNKNOWN_BRAND_NAME,
+            isActive: true
+          }
+        });
+      } else {
+        await tx.brandOption.create({
+          data: {
+            name: UNKNOWN_BRAND_NAME,
+            description: "Fallback brand used when a master brand is deleted.",
+            sortOrder: 9999,
+            isActive: true
+          }
+        });
+      }
+
+      const affectedProducts = await tx.product.findMany({
+        where: {
+          brand: { equals: brand.name, mode: "insensitive" }
+        },
+        select: {
+          id: true,
+          model: true,
+          isActive: true,
+          createdAt: true
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+      });
+
+      const affectedProductIds = affectedProducts.map((product) => product.id);
+
+      let deactivatedCount = 0;
+      let reassignedCount = 0;
+
+      if (affectedProductIds.length > 0) {
+        const existingUnknownActive = await tx.product.findMany({
+          where: {
+            isActive: true,
+            brand: { equals: UNKNOWN_BRAND_NAME, mode: "insensitive" },
+            id: { notIn: affectedProductIds }
+          },
+          select: { model: true }
+        });
+
+        const lockedModelKeys = new Set(existingUnknownActive.map((product) => normalizeComparableText(product.model)));
+        const winnerIds: string[] = [];
+
+        for (const product of affectedProducts) {
+          if (!product.isActive) {
+            continue;
+          }
+
+          const modelKey = normalizeComparableText(product.model);
+          if (lockedModelKeys.has(modelKey)) {
+            continue;
+          }
+
+          lockedModelKeys.add(modelKey);
+          winnerIds.push(product.id);
+        }
+
+        await tx.product.updateMany({
+          where: { id: { in: affectedProductIds } },
+          data: { isActive: false }
+        });
+        await tx.product.updateMany({
+          where: { id: { in: affectedProductIds } },
+          data: { brand: UNKNOWN_BRAND_NAME }
+        });
+
+        if (winnerIds.length > 0) {
+          await tx.product.updateMany({
+            where: { id: { in: winnerIds } },
+            data: { isActive: true }
+          });
+        }
+
+        reassignedCount = affectedProductIds.length;
+        deactivatedCount = affectedProducts.filter((product) => product.isActive).length - winnerIds.length;
+      }
+
+      await tx.brandOption.delete({ where: { id: req.params.id } });
+
+      return {
+        status: 200 as const,
+        reassignedCount,
+        deactivatedCount
+      };
+    });
+
+    if (result.status === 404) {
+      return res.status(404).json({ message: "Brand not found." });
+    }
+    if (result.status === 400) {
+      return res.status(400).json({ message: result.message });
+    }
+
+    return res.json({
+      deleted: true,
+      reassignedCount: result.reassignedCount,
+      deactivatedCount: result.deactivatedCount
+    });
+  } catch (error) {
+    if (isMissingBrandOptionTableError(error)) {
+      return res.status(503).json({ message: "Brand options table is not initialized. Run migrations first." });
+    }
+    throw error;
+  }
 });
 
 adminRouter.get("/options/budgets", async (_req, res) => {

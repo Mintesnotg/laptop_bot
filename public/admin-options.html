@@ -82,6 +82,21 @@
 
     <section class="card option-table-card">
       <div class="card-header">
+        <h2>Brands</h2>
+      </div>
+      <div class="table-wrap">
+        <table id="brandTable" class="display compact">
+          <thead><tr><th>Name</th><th>Description</th><th>#</th><th>Active</th><th>Created</th><th>Updated</th><th>Action</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="inline"><input id="newBrandName" placeholder="brand name" /><input id="newBrandDescription" placeholder="description" /></div>
+      <div class="inline"><input id="newBrandSort" type="number" placeholder="sortOrder" /><label class="chip"><input id="newBrandActive" type="checkbox" checked /> Active</label></div>
+      <button id="addBrandBtn" type="button">Add Brand</button>
+    </section>
+
+    <section class="card option-table-card">
+      <div class="card-header">
         <h2>Budget</h2>
       </div>
       <div class="table-wrap">
@@ -137,6 +152,7 @@
     const statusEl = document.getElementById("status");
 
     const optionTables = {
+      brand: "#brandTable",
       budget: "#budgetTable",
       ram: "#ramTable",
       storage: "#storageTable",
@@ -222,33 +238,25 @@
     }
 
     async function loadAll() {
-      const [channelR, postingR, budgetsR, ramR, storageR, usageR] = await Promise.allSettled([
+      const [channelR, postingR, brandsR, budgetsR, ramR, storageR, usageR] = await Promise.allSettled([
         callAdmin("/options/channel"),
         callAdmin("/options/telegram-posting"),
+        callAdmin("/options/brands"),
         callAdmin("/options/budgets"),
         callAdmin("/options/ram"),
         callAdmin("/options/storage"),
         callAdmin("/options/usage-tags")
       ]);
 
-      if (channelR.status === "rejected" || postingR.status === "rejected" || budgetsR.status === "rejected" || ramR.status === "rejected" || storageR.status === "rejected") {
-        throw new Error(
-          channelR.status === "rejected"
-            ? channelR.reason?.message
-            : postingR.status === "rejected"
-              ? postingR.reason?.message
-              : budgetsR.status === "rejected"
-                ? budgetsR.reason?.message
-                : ramR.status === "rejected"
-                  ? ramR.reason?.message
-                  : storageR.status === "rejected"
-                    ? storageR.reason?.message
-                    : "Failed to load options."
-        );
+      const criticalResults = [channelR, postingR, brandsR, budgetsR, ramR, storageR];
+      const firstFailure = criticalResults.find((result) => result.status === "rejected");
+      if (firstFailure?.status === "rejected") {
+        throw new Error(firstFailure.reason?.message || "Failed to load options.");
       }
 
       const channel = channelR.value;
       const posting = postingR.value;
+      const brands = brandsR.value;
       const budgets = budgetsR.value;
       const ram = ramR.value;
       const storage = storageR.value;
@@ -281,6 +289,7 @@
       document.getElementById("postingCtaText").value = posting.ctaText || "";
       document.getElementById("postingFallbackImageUrl").value = posting.fallbackImageUrl || "";
       document.getElementById("postingAddress").value = posting.fullAddress || "";
+      renderBrandRows(brands.items || []);
       renderBudgetRows(budgets.items || []);
       renderRamRows(ram.items || []);
       renderStorageRows(storage.items || []);
@@ -293,6 +302,65 @@
       }
 
       initOptionTables();
+    }
+
+    function formatDateTime(value) {
+      if (!value) {
+        return "-";
+      }
+
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return "-";
+      }
+
+      return date.toLocaleString();
+    }
+
+    function renderBrandRows(items) {
+      const tbody = document.querySelector("#brandTable tbody");
+      tbody.innerHTML = "";
+      items.forEach((item) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td><input data-f="name" value="${item.name || ""}" /></td><td><input data-f="description" value="${item.description || ""}" /></td><td><input data-f="sortOrder" type="number" value="${item.sortOrder ?? 0}" /></td><td><input data-f="isActive" type="checkbox" ${item.isActive ? "checked" : ""} /></td><td>${formatDateTime(item.createdAt)}</td><td>${formatDateTime(item.updatedAt)}</td><td class="option-actions"></td>`;
+        const saveBtn = document.createElement("button");
+        saveBtn.type = "button";
+        saveBtn.className = "btn btn-secondary table-btn";
+        saveBtn.textContent = "Save";
+        saveBtn.addEventListener("click", async () => {
+          await withButtonAction(saveBtn, "Saving...", async () => {
+            await callAdmin(`/options/brands/${item.id}`, {
+              method: "PUT",
+              body: JSON.stringify({
+                name: tr.querySelector('[data-f="name"]').value.trim(),
+                description: tr.querySelector('[data-f="description"]').value.trim(),
+                sortOrder: Number(tr.querySelector('[data-f="sortOrder"]').value || 0),
+                isActive: tr.querySelector('[data-f="isActive"]').checked
+              })
+            });
+            notify("success", "Saved", "Brand updated.");
+            await loadAll();
+          });
+        });
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "btn btn-danger table-btn";
+        delBtn.textContent = "Delete";
+        delBtn.addEventListener("click", async () => {
+          if (!confirm(`Delete ${item.name}?`)) return;
+          await withButtonAction(delBtn, "Deleting...", async () => {
+            const deleted = await callAdmin(`/options/brands/${item.id}`, { method: "DELETE" });
+            const details =
+              deleted && typeof deleted.reassignedCount === "number"
+                ? ` (${deleted.reassignedCount} reassigned, ${deleted.deactivatedCount || 0} deactivated)`
+                : "";
+            notify("success", "Deleted", `Brand deleted${details}.`);
+            await loadAll();
+          });
+        });
+        tr.querySelector(".option-actions").append(saveBtn, delBtn);
+        tbody.appendChild(tr);
+      });
     }
 
     function renderBudgetRows(items) {
@@ -508,6 +576,27 @@
         });
       } catch (e) {
         notify("error", "Save failed", e.message);
+      }
+    });
+
+    document.getElementById("addBrandBtn").addEventListener("click", async () => {
+      const btn = document.getElementById("addBrandBtn");
+      try {
+        await withButtonAction(btn, "Adding...", async () => {
+          await callAdmin("/options/brands", {
+            method: "POST",
+            body: JSON.stringify({
+              name: document.getElementById("newBrandName").value.trim(),
+              description: document.getElementById("newBrandDescription").value.trim(),
+              sortOrder: Number(document.getElementById("newBrandSort").value || 0),
+              isActive: document.getElementById("newBrandActive").checked
+            })
+          });
+          notify("success", "Added", "Brand added.");
+          await loadAll();
+        });
+      } catch (e) {
+        notify("error", "Add failed", e.message);
       }
     });
 

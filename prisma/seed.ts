@@ -229,6 +229,83 @@ async function main() {
     });
   }
 
+  const brandByKey = new Map<string, string>();
+  for (const product of products) {
+    const normalized = product.brand.trim();
+    if (!normalized) {
+      continue;
+    }
+
+    const key = normalized.toLowerCase();
+    if (!brandByKey.has(key)) {
+      brandByKey.set(key, normalized);
+    }
+  }
+
+  const seededBrandNames = Array.from(brandByKey.values()).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" })
+  );
+
+  for (const [index, brandName] of seededBrandNames.entries()) {
+    const existingInsensitive = await prisma.brandOption.findFirst({
+      where: {
+        name: { equals: brandName, mode: "insensitive" }
+      },
+      select: { id: true }
+    });
+
+    if (existingInsensitive) {
+      await prisma.brandOption.update({
+        where: { id: existingInsensitive.id },
+        data: {
+          name: brandName,
+          isActive: true,
+          sortOrder: index
+        }
+      });
+      continue;
+    }
+
+    await prisma.brandOption.create({
+      data: {
+        name: brandName,
+        description: "",
+        sortOrder: index,
+        isActive: true
+      }
+    });
+  }
+
+  const exactUnknownBrand = await prisma.brandOption.findUnique({
+    where: { name: "Unknown" },
+    select: { id: true }
+  });
+  const variantUnknownBrand = !exactUnknownBrand
+    ? await prisma.brandOption.findFirst({
+        where: { name: { equals: "Unknown", mode: "insensitive" } },
+        select: { id: true }
+      })
+    : null;
+
+  if (exactUnknownBrand || variantUnknownBrand) {
+    await prisma.brandOption.update({
+      where: { id: exactUnknownBrand?.id ?? variantUnknownBrand!.id },
+      data: {
+        name: "Unknown",
+        isActive: true
+      }
+    });
+  } else {
+    await prisma.brandOption.create({
+      data: {
+        name: "Unknown",
+        description: "Fallback brand used when a master brand is deleted.",
+        sortOrder: 9999,
+        isActive: true
+      }
+    });
+  }
+
   await prisma.adminUser.upsert({
     where: { username: adminUsername },
     update: {

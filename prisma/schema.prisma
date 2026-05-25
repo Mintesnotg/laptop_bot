@@ -198,6 +198,18 @@ model UsageTagOption {
   @@index([isActive, sortOrder])
 }
 
+model BrandOption {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String   @default("")
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
 model AppSetting {
   id        String   @id @default(cuid())
   key       String   @unique

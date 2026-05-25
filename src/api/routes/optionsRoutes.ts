@@ -6,6 +6,49 @@ import { DEFAULT_USAGE_OPTIONS, RAM_OPTIONS, STORAGE_OPTIONS } from "../../share
 
 export const optionsRouter = Router();
 
+optionsRouter.get("/brands", async (_req, res) => {
+  try {
+    const rows = await prisma.brandOption.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
+    });
+
+    if (rows.length > 0) {
+      return res.json({
+        items: rows.map((row) => ({
+          name: row.name,
+          description: row.description
+        }))
+      });
+    }
+  } catch (error) {
+    if (
+      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+      error.code !== "P2021" ||
+      !(
+        (typeof error.meta?.table === "string" && error.meta.table.includes("BrandOption")) ||
+        error.message.toLowerCase().includes("brandoption")
+      )
+    ) {
+      throw error;
+    }
+  }
+
+  const productRows = await prisma.product.findMany({
+    where: { isActive: true },
+    select: { brand: true },
+    distinct: ["brand"],
+    orderBy: { brand: "asc" }
+  });
+
+  return res.json({
+    items: productRows
+      .map((row) => row.brand.trim())
+      .filter((name, index, all) => name.length > 0 && all.findIndex((entry) => entry.toLowerCase() === name.toLowerCase()) === index)
+      .map((name) => ({ name, description: "" }))
+  });
+});
+
 optionsRouter.get("/budgets", async (_req, res) => {
   const rows = await prisma.budgetOption.findMany({
     where: { isActive: true },

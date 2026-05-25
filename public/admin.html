@@ -588,7 +588,7 @@
         <div class="inline">
           <div>
             <label for="brand">Brand</label>
-            <input id="brand" required />
+            <select id="brand" required></select>
           </div>
           <div>
             <label for="model">Model</label>
@@ -725,6 +725,7 @@
       totalPages: 1,
       uploadedImageUrls: [],
       usageTagsMeta: [],
+      brandOptions: [],
       ramOptions: [],
       storageOptions: []
     };
@@ -743,21 +744,27 @@
     }
 
     async function loadMasterOptions() {
-      const [ramResponse, storageResponse] = await Promise.all([
+      const [brandResponse, ramResponse, storageResponse] = await Promise.all([
+        fetch("/api/options/brands", { cache: "no-store" }),
         fetch("/api/options/ram", { cache: "no-store" }),
         fetch("/api/options/storage", { cache: "no-store" })
       ]);
-      if (!ramResponse.ok || !storageResponse.ok) {
-        throw new Error("Failed to load RAM/Storage options");
+      if (!brandResponse.ok || !ramResponse.ok || !storageResponse.ok) {
+        throw new Error("Failed to load brand/RAM/Storage options");
       }
+      const brandData = await brandResponse.json();
       const ramData = await ramResponse.json();
       const storageData = await storageResponse.json();
+      state.brandOptions = asArray(brandData.items);
       state.ramOptions = asArray(ramData.items);
       state.storageOptions = asArray(storageData.items);
       renderMasterOptionSelects();
     }
 
     function renderMasterOptionSelects() {
+      const brandOptionsMarkup = asArray(state.brandOptions)
+        .map((entry) => `<option value="${entry.name}">${entry.name}</option>`)
+        .join("");
       const ramOptionsMarkup = asArray(state.ramOptions)
         .map((entry) => `<option value="${entry.gb}">${entry.label}</option>`)
         .join("");
@@ -765,6 +772,8 @@
         .map((entry) => `<option value="${entry.gb}">${entry.label}</option>`)
         .join("");
 
+      document.getElementById("brand").innerHTML =
+        brandOptionsMarkup || '<option value="" disabled selected>No active brands available</option>';
       document.getElementById("ramGb").innerHTML = ramOptionsMarkup;
       document.getElementById("storageGb").innerHTML = storageOptionsMarkup;
       document.getElementById("editRamGb").innerHTML = ramOptionsMarkup;

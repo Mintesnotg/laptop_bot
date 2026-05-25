@@ -185,6 +185,28 @@ export const openApiDocument = {
           }
         }
       },
+      BrandOptionInput: {
+        type: "object",
+        required: ["name"],
+        properties: {
+          name: { type: "string" },
+          description: { type: "string" },
+          sortOrder: { type: "integer", default: 0 },
+          isActive: { type: "boolean", default: true }
+        }
+      },
+      BrandOptionResponse: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          description: { type: "string" },
+          sortOrder: { type: "integer" },
+          isActive: { type: "boolean" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" }
+        }
+      },
       ProductStatusInput: {
         type: "object",
         required: ["isActive"],
@@ -368,6 +390,36 @@ export const openApiDocument = {
         }
       }
     },
+    "/api/options/brands": {
+      get: {
+        tags: ["Recommendations"],
+        summary: "List active laptop brands",
+        responses: {
+          "200": {
+            description: "Active brand options",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    items: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          name: { type: "string" },
+                          description: { type: "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/auth/login": {
       post: {
         tags: ["Admin Auth"],
@@ -448,6 +500,96 @@ export const openApiDocument = {
           },
           "400": { description: "Validation error" },
           "409": { description: "Active product with same brand and model already exists" }
+        }
+      }
+    },
+    "/api/admin/options/brands": {
+      get: {
+        tags: ["Admin"],
+        summary: "List all brand options",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        responses: {
+          "200": {
+            description: "Brand options list",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    items: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/BrandOptionResponse" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      post: {
+        tags: ["Admin"],
+        summary: "Create a brand option",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/BrandOptionInput" }
+            }
+          }
+        },
+        responses: {
+          "201": {
+            description: "Brand option created",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/BrandOptionResponse" }
+              }
+            }
+          },
+          "400": { description: "Validation error" },
+          "409": { description: "Duplicate brand name" }
+        }
+      }
+    },
+    "/api/admin/options/brands/{id}": {
+      put: {
+        tags: ["Admin"],
+        summary: "Update a brand option",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/BrandOptionInput" }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Updated brand option",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/BrandOptionResponse" }
+              }
+            }
+          },
+          "400": { description: "Validation error" },
+          "404": { description: "Brand not found" },
+          "409": { description: "Duplicate brand name" }
+        }
+      },
+      delete: {
+        tags: ["Admin"],
+        summary: "Delete a brand option and reassign affected products to Unknown",
+        security: [{ BearerAuth: [] }, { AdminApiKey: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": { description: "Brand option deleted" },
+          "400": { description: "Reserved brand cannot be deleted" },
+          "404": { description: "Brand not found" }
         }
       }
     },
