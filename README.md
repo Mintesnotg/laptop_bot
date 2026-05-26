@@ -164,13 +164,36 @@ docker compose up -d --build
 docker compose logs -f app
 ```
 
-On app startup, the container runs `prisma migrate deploy`, then `db:seed`, then starts the API server.
+When using Docker locally, run migrations and seed manually before first app start:
+
+```bash
+npm run db:deploy
+npm run db:seed
+```
 
 4. Stop everything:
 
 ```bash
 docker compose down
 ```
+
+## Render Deployment (Managed Postgres + Web Service)
+
+This repository includes [`render.yaml`](./render.yaml) to provision separate resources on Render:
+
+- a managed Postgres database (`databases`)
+- a Docker web service (`services`)
+
+Deploy steps:
+
+1. Push this repo to GitHub.
+2. In Render, create a new Blueprint and select this repository.
+3. During setup, provide values for `sync: false` env vars (`TELEGRAM_BOT_TOKEN`, `BOT_API_BASE_URL`, `ADMIN_API_KEY`).
+4. Render runs pre-deploy tasks (`npm run db:deploy && npm run db:seed`) and then starts the app container.
+
+Port binding note:
+
+- The app now supports `PORT` (Render default) and binds to `0.0.0.0`.
 
 ## Enterprise Network TLS (Telegram)
 

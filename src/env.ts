@@ -6,12 +6,14 @@ dotenv.config();
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  API_PORT: z.coerce.number().default(3000),
+  PORT: z.coerce.number().optional(),
+  API_PORT: z.coerce.number().optional(),
+  API_HOST: z.string().default("0.0.0.0"),
   DATABASE_URL: z.string().min(1),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   TELEGRAM_API_ROOT: z.string().url().default("https://api.telegram.org"),
   TELEGRAM_CA_CERT_PATH: z.string().optional(),
-  TELEGRAM_TLS_INSECURE: z.boolean().default(true),
+  TELEGRAM_TLS_INSECURE: z.coerce.boolean().default(true),
   BOT_API_BASE_URL: z.string().url().default("http://localhost:3000"),
   BOT_MODE: z.enum(["polling", "webhook"]).default("polling"),
   BOT_WEBHOOK_PATH: z.string().default("/telegram/webhook"),
@@ -31,4 +33,9 @@ if (!parsedEnv.success) {
   process.exit(1);
 }
 
-export const env = parsedEnv.data;
+const apiPort = parsedEnv.data.PORT ?? parsedEnv.data.API_PORT ?? 3000;
+
+export const env = {
+  ...parsedEnv.data,
+  API_PORT: apiPort
+};

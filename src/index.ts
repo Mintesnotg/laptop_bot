@@ -35,8 +35,8 @@ function printTelegramStartupHelp(error: unknown) {
   console.error("Temporary fallback only: set TELEGRAM_TLS_INSECURE=true in local development.");
 }
 
-const server = app.listen(env.API_PORT, async () => {
-  console.log(`API server running on http://localhost:${env.API_PORT}`);
+const server = app.listen(env.API_PORT, env.API_HOST, async () => {
+  console.log(`API server running on ${env.API_HOST}:${env.API_PORT}`);
 
   try {
     if (env.BOT_MODE === "polling") {

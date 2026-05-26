@@ -1,0 +1,46 @@
+databases:
+  - name: laptop-bot-db
+    databaseName: laptop_bot
+    user: laptop_bot_user
+    plan: starter
+
+services:
+  - type: web
+    name: laptop-bot-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    preDeployCommand: npm run db:deploy && npm run db:seed
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: API_PORT
+        value: "10000"
+      - key: API_HOST
+        value: "0.0.0.0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: laptop-bot-db
+          property: connectionString
+      - key: TELEGRAM_API_ROOT
+        value: https://api.telegram.org
+      - key: TELEGRAM_TLS_INSECURE
+        value: "false"
+      - key: BOT_MODE
+        value: polling
+      - key: BOT_API_BASE_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true
+      - key: ADMIN_API_KEY
+        sync: false
+      - key: ADMIN_JWT_SECRET
+        generateValue: true
+      - key: ADMIN_JWT_EXPIRES_IN
+        value: 12h
