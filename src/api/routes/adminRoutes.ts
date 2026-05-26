@@ -211,7 +211,6 @@ async function ensureActiveBrandExists(brandName: string) {
 }
 
 function withFeatureLinesFallback<T extends ProductCompatibilityRow>(product: T) {
- debugger
   return {
     ...product,
     featureLines: Array.isArray(product.featureLines) ? product.featureLines : []

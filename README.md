@@ -115,7 +115,7 @@ npm install
 2. Start PostgreSQL:
 
 ```bash
-docker compose up -d
+docker compose up -d postgres
 ```
 
 3. Configure `.env`:
@@ -147,6 +147,30 @@ npm run dev
 
 - `http://localhost:3000/docs`
 - raw OpenAPI JSON: `http://localhost:3000/openapi.json`
+
+## Dockerized Setup (App + DB)
+
+1. Create `.env` from `.env.example` and set required secrets (`TELEGRAM_BOT_TOKEN`, `ADMIN_JWT_SECRET`, etc.).
+
+2. Build and start everything:
+
+```bash
+docker compose up -d --build
+```
+
+3. Tail logs:
+
+```bash
+docker compose logs -f app
+```
+
+On app startup, the container runs `prisma migrate deploy`, then `db:seed`, then starts the API server.
+
+4. Stop everything:
+
+```bash
+docker compose down
+```
 
 ## Enterprise Network TLS (Telegram)
 

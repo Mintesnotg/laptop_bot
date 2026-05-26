@@ -9,8 +9,35 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres@2026#
       POSTGRES_DB: laptop_bot
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d laptop_bot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: laptop_bot_app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      API_PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres%402026%23@postgres:5432/laptop_bot?schema=public
+      BOT_API_BASE_URL: http://localhost:3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./uploads:/app/uploads
 
 volumes:
   postgres_data:
